@@ -44,7 +44,7 @@ Contains
     character*1,intent(out) :: direction
     character*200,intent(out) :: lineP
     double precision,intent(out) :: strength
-    integer :: Findex,indexF
+    integer :: Findex,indexF,ios
 
         !-- Get the direction of the applied field
     Findex=index(line,substr1)
@@ -57,7 +57,7 @@ Contains
     else
         indexF=index(line,fchk2)
     end if
-    read(line(Findex+1:indexF-1),*) strength
+    read(line(Findex+1:indexF-1),*,iostat=ios) strength
 
         !-- Get the substring of only properties
     lineP=line(indexF+6:size)
@@ -95,7 +95,7 @@ Contains
             call ReadValues(line,len_trim(line),isEnergy,".fchk-",".fchk:",substr1,substr2,field_direction,field_strength,postLine)
             if (field_strength.lt.0.0d0) nF=nF+1
             if (field_strength.gt.0.0d0) pF=pF+1
-            read(postLine,*) P_general(1,1),P_general(2,1),P_general(3,1),P_general(4,1),P_general(5,1)
+            read(postLine,*,iostat=ios) P_general(1,1),P_general(2,1),P_general(3,1),P_general(4,1),P_general(5,1)
         read(4,'(A)') line
             call ReadValues(line,len_trim(line),isEnergy,".fchk-",".fchk:",substr1,substr2,field_direction,field_strength,postLine)
             !-- Condition only applicable for alpha (only P_general(1,2)) and beta (P_general(1:5,2))
@@ -123,16 +123,15 @@ Contains
 
     End subroutine DeclareProperties
 
-    Subroutine ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,stepSQRT,mF,totalFields,F,P,secRombergP,mainRombergP)
+    Subroutine ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,mF,totalFields,F,P,secRombergP,mainRombergP)
     implicit none
     character*1,dimension(3) :: dipoleComponents
     character*2,dimension(6) :: alphaComponents
     character*3,dimension(10) :: betaComponents
     character*1, intent(in) :: field_direction
-    logical, intent(in) :: stepSQRT
     integer, intent(in) :: axis,component,totalFields,inlop,onlop,mF,o_derivative 
     double precision, intent(in), dimension(totalFields) :: F,P
-    double precision, intent(out), dimension(2) :: mainRombergP,secRombergP
+    double precision, intent(out), dimension(3) :: mainRombergP,secRombergP
     double precision :: a,main_errRomberg,sec_errRomberg
     double precision :: energyDerivative = 1.0d0
     double precision, allocatable, dimension(:,:) :: RombergP    
@@ -180,22 +179,13 @@ Contains
     if (inlop.eq.3) write(*,'(" RomberG - Computing the derivative of β",A3," with respect to ",A1)') betaComponents(component-1),field_direction
     call RombergProcedure(a,derivative_order,FF,minloc_errRomberg,errorP,main_errRomberg,sec_errRomberg,RombergP)
     
-    !if (inlop.eq.0) then 
-    !    allocate(mainRombergTensor(3,2,3)); allocate(secRombergTensor(3,2,3))
-    !else if (inlop.eq.1) then 
-    !    allocate(mainRombergTensor(3,2,3)); allocate(secRombergTensor(3,2,3))
-    !else if (inlop.eq.2) then 
-    !    allocate(mainRombergTensor(6,2,3)); allocate(secRombergTensor(6,2,3))
-    !else if (inlop.eq.3) then 
-    !    allocate(mainRombergTensor(10,2,3));allocate(secRombergTensor(10,2,3))
-    !end if
-
-    mainRombergP(1)=RombergP(minloc_errRomberg(1,1),minloc_errRomberg(2,1)); mainRombergP(2)=main_errRomberg
-    secRombergP(1)=RombergP(minloc_errRomberg(1,2),minloc_errRomberg(2,2)); secRombergP(2)=sec_errRomberg
+        !-- Get the output values in vector form for the later handling
+    mainRombergP(1)=RombergP(minloc_errRomberg(1,1),minloc_errRomberg(2,1)); mainRombergP(2)=main_errRomberg; mainRombergP(3)=1.0d2*mainRombergP(2)/mainRombergP(1)
+    secRombergP(1)=RombergP(minloc_errRomberg(1,2),minloc_errRomberg(2,2)); secRombergP(2)=sec_errRomberg; secRombergP(3)=1.0d2*secRombergP(2)/secRombergP(1)
 
     End subroutine ComputeDerivatives
 
-    Subroutine RombergProcedure(a,derivative_order,P,err_minloc,errRombergT,errRomberg1,errRomberg2,RombergT)
+    Subroutine RombergProcedure(a,derivative_order,P,err_minloc,errRombergT,abs_errRomberg1,abs_errRomberg2,RombergT)
     implicit none
     integer, intent(in) :: derivative_order
     double precision, intent(in) :: a
@@ -203,7 +193,7 @@ Contains
     double precision, allocatable, intent(out), dimension(:,:) :: RombergT,errRombergT
     double precision, allocatable, dimension(:,:) :: errRomberg
     integer, intent(out), dimension(2,2) :: err_minloc
-    double precision :: errRomberg1,errRomberg2
+    double precision :: abs_errRomberg1,abs_errRomberg2
     integer :: iterRR
     integer :: i,j
 
@@ -229,10 +219,17 @@ Contains
         end do
     end do
     
-    write(*,*)
+    write(*,*) "                            ROMBERG TRIANGLE"
     write(*,*) "Iteration:",(j-1,"              ",j=1,mF-1)
     do i=1,mF-1
-        write(*,*) "        ",(RombergT(i,j),j=1,mF-1)
+        do j=1,mF-1
+            if (RombergT(i,j).eq.9.9d99) then
+                write(*,'(A)',advance='NO') "   "
+            else
+                write(*,'(xxxxxxxxF20.10)',advance="no") RombergT(i,j)
+            end if
+        end do
+        write(*,*)
     end do
 
         !-- Compute the Romberg absolute error matrix (errRomberg,intent(out)) and save:
@@ -246,21 +243,89 @@ Contains
             errRomberg(j,i)=abs(RombergT(j,i)-RombergT(j+1,i))
         end do
     end do
-
     errRombergT=errRomberg
+
+    write(*,*) "                        ROMBERG ERROR TRIANGLE"
     do i=1,mF-2
-        write(*,*) "        ",(errRomberg(i,j),j=1,mF-2)
+        do j=1,mF-2
+            if (errRombergT(i,j).eq.9.9d99) then
+                write(*,'(A)',advance='NO') "   "
+            else
+                write(*,'(xxxxxxxxF20.10)',advance="no") errRomberg(i,j)
+            end if
+        end do
+        write(*,*)
     end do
 
         !-- Get the position of the value with the lowest and second-to-lowest errors
-    errRomberg1=minval(errRomberg)
+    abs_errRomberg1=minval(errRomberg)
     err_minloc(1:2,1)=minloc(errRomberg)
         errRomberg(err_minloc(1,1),err_minloc(2,1))=9.9d99
-    errRomberg2=minval(errRomberg) 
+    abs_errRomberg2=minval(errRomberg) 
     err_minloc(1:2,2)=minloc(errRomberg)
     deallocate(errRomberg)
 
+    write(*,*)
+    write(*,'(" RomberG - Minimum value:",xF20.10,xx"and second best:",xF20.10)') RombergT(err_minloc(1,1),err_minloc(2,1)),RombergT(err_minloc(1,2),err_minloc(2,2))
+    write(*,'(" RomberG - Minimum absolute errors for the properties:",xF20.10,xx"and:",xF20.10)') abs_errRomberg1,abs_errRomberg2
+    write(*,'(" RomberG - Romberg errors:",xF20.10,"% &&",xF20.10,"%")') 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
+    write(*,*)
+
     End subroutine RombergProcedure
+
+    Subroutine Halestorm(isEnergy,printProperties,indexString,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    implicit none
+    character*1,dimension(6) :: derivative_substr
+    logical, intent(inout) :: isEnergy
+    logical, intent(in) :: printProperties
+    character, intent(in), dimension(components) :: indexString
+    double precision, allocatable, intent(inout), dimension(:,:,:) :: mainRombergP,secRombergP,TensorP
+    integer, intent(in) :: inlop,onlop,components,derivative_order,mF,totalFields
+    double precision, dimension(3) :: secP,mainP
+    integer :: i,j,k
+    
+    derivative_substr=(/"x","y","z","X","Y","Z"/)
+
+    do k=1,3
+            !-- Get the properties into a three-layer tensor for the respective derivative computation
+        call DeclareProperties(isEnergy,derivative_substr(k),derivative_substr(k+3),inlop,mF,totalFields,TensorP)
+       !call DeclareProperties(isEnergy,substr1,substr2,inlop,mF,totalFields,TensorP)
+        if (printProperties.eqv..TRUE.) call PrintP(TensorP,components+1,totalFields,k)
+
+        do i=2,7
+                !-- Compute the finite-field approach for the given property and perform the Romberg procedure to reduce the error
+            call ComputeDerivatives(k,i,inlop,onlop,derivative_substr(k+3),derivative_order,mF,totalFields,TensorP(1:totalFields,1,k),TensorP(1:totalFields,i,k),secP,mainP)
+           !call ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,stepSQRT,mF,totalFields,F,P,secRombergTensor,mainRombergTensor)
+
+                !-- Get the full output values of the Romberg iterations
+            mainRombergP(i-1,1,k)=mainP(1); mainRombergP(i-1,2,k)=mainP(2); mainRombergP(i-1,3,k)=mainP(3)
+            secRombergP(i-1,1,k)=secP(1); secRombergP(i-1,2,k)=secP(2); secRombergP(i-1,3,k)=secP(3)
+        end do
+        write(*,*)
+        write(*,*) "######################################################"
+        write(*,*) "######################################################"
+        write(*,*) "######################################################"
+        write(*,*)
+    end do
+
+        !-- Print the mainRomberG output values
+    do k=1,3
+        write(*,*) ("                         ",indexString(i),i=1,components) 
+        write(*,*) derivative_substr(k+3),"             Value=",(mainRombergP(j,1,k),j=1,components)
+        write(*,*) derivative_substr(k+3),"    Absolute error=",(mainRombergP(j,2,k),j=1,components)
+        write(*,*) derivative_substr(k+3),"  RomberG error(%)=",(mainRombergP(j,3,k),j=1,components)
+    end do
+    if (printProperties.eqv..TRUE.) then
+        do k=1,3
+            write(*,*) ("                         ",indexString(i),i=1,6) 
+            write(*,*) derivative_substr(k+3),"             Value=",(secRombergP(j,1,k),j=1,components)
+            write(*,*) derivative_substr(k+3),"    Absolute error=",(secRombergP(j,2,k),j=1,components)
+            write(*,*) derivative_substr(k+3),"  RomberG error(%)=",(secRombergP(j,3,k),j=1,components)
+        end do
+    end if
+    write(*,*)
+
+    End subroutine
 
 End module GrebmoR
 !###################################################################################################
@@ -273,6 +338,7 @@ use GrebmoR     !-- Utilities module for RomberG
 implicit none
 character*1 :: arg,field_direction
 character*1,dimension(6) :: derivative_substr
+character :: dipoleComponents(3)*1, alphaComponents(6)*2,betaComponents(10)*3
 character*200 :: line,postLine
 character*100 :: basename,mol_name
 logical :: doLongitudinal = .FALSE.
@@ -283,11 +349,11 @@ logical :: isEnergy,isDipole,isAlpha,isBeta,isGamma
     !-- Tensors in which the properties are gathered
 double precision, allocatable, dimension (:,:,:) :: P_energy,P_dipole,P_alpha,P_beta
     !-- Output tensors for each property
-double precision, dimension(2) :: mainP,secP
+double precision, dimension(3) :: mainP,secP
+double precision, allocatable, dimension (:,:,:) :: mainRombergEnergy,secRombergEnergy
 double precision, allocatable, dimension (:,:,:) :: mainRombergDipole,secRombergDipole
 double precision, allocatable, dimension (:,:,:) :: mainRombergAlpha,secRombergAlpha
 double precision, allocatable, dimension (:,:,:) :: mainRombergBeta,secRombergBeta
-double precision, allocatable, dimension (:,:,:) :: mainRombergGamma,secRombergGamma
     !-- Dummy matrix to store the properties 
 double precision, dimension (5,2) :: P_general
 double precision :: field_strength
@@ -306,6 +372,9 @@ opts(5) = option_s("positive-fields",.TRUE.,"F")
 opts(6) = option_s("P",.FALSE.,"p")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
+dipoleComponents=(/"X","Y","Z"/)
+alphaComponents=(/"XX","XY","YY","XZ","YZ","ZZ"/)
+betaComponents=(/"XXX","XXY","XYY","YYY","XXZ","XYZ","YZZ","XZZ","YZZ","ZZZ"/)
 
 if (command_argument_count().le.1) then
     write(*,*) "$ man RomberG.f95"
@@ -348,7 +417,7 @@ do
             call CatchProperties(optarg,"Dipole","dipole","M     ",indexDipole,isDipole)
             call CatchProperties(optarg,"Alpha ","alpha ","A     ",indexAlpha,isAlpha)
             call CatchProperties(optarg,"Beta  ","beta  ","B     ",indexBeta,isBeta)
-            call CatchProperties(optarg,"Gamma ","gamma ","G     ",indexBeta,isGamma)
+            call CatchProperties(optarg,"Gamma ","gamma ","G     ",indexGamma,isGamma)
 
             if (indexDipole.eq.0.and.indexAlpha.eq.0.and.indexBeta.eq.0.and.indexGamma.eq.0) then
                 write(*,*) " Not valid OUTPUT option. Legal options:"
@@ -373,7 +442,6 @@ do
             positiveFields=(totalFields-1)/2
             negativeFields=positiveFields
             mF=positiveFields+1
-            !-- Middle position can be defined as mF=positiveFields+1
 
         case("l","longitudinal")
             doLongitudinal=.TRUE.
@@ -402,19 +470,23 @@ call get_command_argument(command_argument_count(),value=mol_name,status=stat1)
 
     !-- Get the field-dependent properties from the .fchk files
 if (inlop.eq.0) then
+    isEnergy=.TRUE.
     call system("rm isEnergy.nlop")
     call system("cd $(pwd)/"//mol_name//" ; grep 'Total Energy' *.fchk > isEnergy.nlop; sed -i '/Total Energy/d' isEnergy.nlop; cp isEnergy.nlop ../")
     open (unit=4,file="isEnergy.nlop",status="old")
 else if (inlop.eq.1) then
+    isEnergy=.FALSE.
     call system("rm isDipole.nlop")
     call system("cd $(pwd)/"//mol_name//" ; grep -A 1 'Dipole' *.fchk > isDipole.nlop; sed -i '/Dipole/d' isDipole.nlop; cp isDipole.nlop ../")
     open (unit=4,file="isDipole.nlop",status="old")
 else if (inlop.eq.2) then
+    isEnergy=.FALSE.
     call system("rm isAlpha.nlop")
     call system("cd $(pwd)/"//mol_name//" ; grep -A 2 'Polarizability' *.fchk > isAlpha.nlop; sed -i '/Polarizability/d' isAlpha.nlop; cp isAlpha.nlop ../")
     open (unit=4,file="isAlpha.nlop",status="old")
 else if (inlop.eq.3) then
         !-- Remember that for beta the sign is changed with respect to the regular convetion!
+    isEnergy=.FALSE.
     call system("rm isBeta.nlop")
     call system("cd $(pwd)/"//mol_name//" ; grep -A 2 'Hyperpolarizability' *.fchk > isBeta.nlop; sed -i '/Hyperpolarizability/d' isBeta.nlop; cp isBeta.nlop ../")
     open (unit=4,file="isBeta.nlop",status="old")
@@ -425,6 +497,7 @@ end if
 if (inlop.ge.2) read(4,*,iostat=ios) line,P_general(1,2),P_general(2,2),P_general(3,2),P_general(4,2),P_general(5,2)
 
     !-- Declare the zero-field properties according to Gaussian's .fchk format
+        !-- He d'intentar millorar aquesta part del codi
 dummy=1
 if (inlop.eq.3) then
     allocate(P_beta(totalFields,11,3))
@@ -468,75 +541,30 @@ if (inlop.eq.3.and.onlop.eq.4) write(*,*) "                     COMPUTING THE CO
 write(*,*) "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
 write(*,*)
 
-if (inlop.eq.2) then
-    
-        !-- k.eq.1 --> Derivative wrt X
-        !-- k.eq.2 --> Derivative wrt Y
-        !-- k.eq.3 --> Derivative wrt Z
+if (inlop.eq.2) then !-- Compute the derivatives of alpha
+
     if (allocated(mainRombergAlpha)) deallocate(mainRombergAlpha)
     if (allocated(secRombergAlpha)) deallocate(secRombergAlpha)
-    allocate(mainRombergAlpha(6,2,3)); allocate(secRombergAlpha(6,2,3))
-    do k=1,3
-       !call DeclareProperties(isEnergy,substr1,substr2,inlop,mF,totalFields,TensorP)
-        call DeclareProperties(isEnergy,derivative_substr(k),derivative_substr(k+3),inlop,mF,totalFields,P_alpha)
-        if (printProperties.eqv..TRUE.) call PrintP(P_alpha,7,totalFields,k)
-        do i=2,7
-           !call ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,stepSQRT,mF,totalFields,F,P,secRombergTensor,mainRombergTensor)
-            call ComputeDerivatives(k,i,inlop,onlop,derivative_substr(k+3),derivative_order,doSQRTstep,mF,totalFields,P_alpha(1:totalFields,1,k),P_alpha(1:totalFields,i,k),secP,mainP)
-                !-- Get the full output values of the Romberg iterations
-            mainRombergAlpha(i-1,1,k)=mainP(1); mainRombergAlpha(i-1,2,k)=mainP(2)
-            secRombergAlpha(i-1,1,k)=secP(1); secRombergAlpha(i-1,2,k)=secP(2)
-        end do
-        write(*,*)
-        write(*,*) "######################################################&
-        &##########################################################################################################################################"
-        write(*,*) "######################################################&
-        &##########################################################################################################################################"
-        write(*,*) "######################################################&
-        &##########################################################################################################################################"
-        write(*,*)
-    end do
+    allocate(mainRombergAlpha(6,3,3)); allocate(secRombergAlpha(6,3,3))
+    call Halestorm(isEnergy,printProperties,alphaComponents,inlop,onlop,6,derivative_order,mF,totalFields,P_alpha,secRombergAlpha,mainRombergAlpha)
 
-        !-- Compute the derivatives with respect to the field
-else if (inlop.eq.1) then
-    do
-        read(4,'(A)') line
-            call ReadValues(line,len_trim(line),.FALSE.,".fchk-",".fchk:","x","X",field_direction,field_strength,line)
-            read(line,*,iostat=ios) P_general(1,1),P_general(2,1),P_general(3,1),P_general(4,1),P_general(5,1)
-    end do
-else if (inlop.eq.0) then
-    do
-        !read(4,'(A,A1,F7.4,".fchk:Total Energy                               R",E18.15)',iostat=ios) &
-        !& basename,field_direction,field_strength,P_general(1,1)
-    end do
+else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
+
+        !-- This section has to be revised
+    if (allocated(mainRombergDipole)) deallocate(mainRombergDipole)
+    if (allocated(secRombergDipole)) deallocate(secRombergDipole)
+    allocate (mainRombergDipole(3,3,3)); allocate(secRombergDipole(3,3,3))
+    call Halestorm(isEnergy,printProperties,dipoleComponents,inlop,onlop,3,derivative_order,mF,totalFields,P_dipole,secRombergDipole,mainRombergDipole)
+
+else if (inlop.eq.0) then !-- Compute the derivatives of the energy
+
+    if (allocated(mainRombergEnergy)) deallocate(mainRombergEnergy)
+    if (allocated(secRombergEnergy)) deallocate(secRombergEnergy)
+    allocate (mainRombergEnergy(3,3,3)); allocate(secRombergEnergy(3,3,3))
+    call Halestorm(isEnergy,printProperties,dipoleComponents,inlop,onlop,3,derivative_order,mF,totalFields,P_energy,secRombergEnergy,mainRombergEnergy)
+
 end if
 
-write(*,*)
-write(*,*) "X"
-do i=1,2
-    write(*,*) (mainRombergAlpha(j,i,1),j=1,6)
-end do
-
-write(*,*) "Y"
-do i=1,2
-    write(*,*) (mainRombergAlpha(j,i,2),j=1,6)
-end do
-
-write(*,*) "Z"
-do i=1,2
-    write(*,*) (mainRombergAlpha(j,i,3),j=1,6)
-end do
-
-!do i=1,mF-1
-!    do j=1,mF-1
-!        if (RombergT(i,j).eq.9.9d99) then
-!            write(*,'(A)',advance='NO') "   "
-!        else
-!            write(*,'(xxxF20.10)',advance="no") RombergT(i,j)
-!        end if
-!    end do
-!    write(*,*)
-!end do
 
 End program
 
