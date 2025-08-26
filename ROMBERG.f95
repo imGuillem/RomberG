@@ -91,7 +91,6 @@ Contains
     if (substr1.eq."z".or.substr2.eq."Z") level=3
     
     nF=0; pF=0
-    !if (inlop.eq.0) backspace(4)
     do while(nF+pF+1.ne.totalFields)
 
             !-- Get the necessary properties to parse them into the ComputeDerivatives subroutine
@@ -176,17 +175,17 @@ Contains
         end do
     else if (o_derivative.eq.3) then !compute finite-field's third derivative
         do i=1,mF-1
-            FF(i)=energyDerivative*(P(i)-2.0d0*P(i)+2.0d0*P(mF+i)-P(mF+i+1))/(2.0d0*F(mF+i)**3)
+            FF(i)=3.0d0*energyDerivative*(P(i)-a*P(i)+a*P(mF+i)-P(mF+i+1))/(a*(a**2.0d0-1)*F(mF+i)**3)
         end do
     else if (o_derivative.eq.4) then !compute finite-field's fourth derivative
         do i=1,mF-1
-            FF(i)=energyDerivative*(P(i+2)-4.0d0*P(i)+6.0d0*P(mF)-4.0d0*P(mF+i)+P(mF+i+2))/F(mF+i)**4
+            FF(i)=12.0d0*energyDerivative*(P(i+2)-(a**2.0d0)*P(i)+2.0d0*(a**2.0d0-1)*P(mF)-(a**2.0d0)*P(mF+i)+P(mF+i+2))/(a**2.0d0*(a**2.0d0-1)*F(mF+i)**4)
         end do
     end if
 
-    do i=1,totalFields
-        write(*,*) F(i),P(i)
-    end do
+    !do i=1,totalFields
+    !    write(*,*) F(i),P(i),FF(i)
+    !end do
 
         ! E    ! μ    ! α    ! β    ! γ
     if (inlop.eq.0) write(*,'(" RomberG - Computing the derivative of the Energy with respect to ",A1)') field_direction
@@ -285,23 +284,27 @@ Contains
     write(*,*)
     write(*,'(" RomberG - Minimum value:",xF20.10,xx"and second best:",xF20.10)') RombergT(err_minloc(1,1),err_minloc(2,1)),RombergT(err_minloc(1,2),err_minloc(2,2))
     write(*,'(" RomberG - Minimum absolute errors for the properties:",xF20.10,xx"and:",xF20.10)') abs_errRomberg1,abs_errRomberg2
-    write(*,'(" RomberG - Romberg errors:",xF20.10,"% &&",xF20.10,"%")') 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
+    write(*,'(" RomberG - Romberg errors:",xF20.10,"% &&",xF20.10,"%")') &
+    & 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
     write(*,*)
 
     End subroutine RombergProcedure
 
-    Subroutine Reps(isEnergy,printProperties,indexString,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    Subroutine Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
     implicit none
     character*1,dimension(6) :: derivative_substr
+    character :: dipoleComponents(3)*1, alphaComponents(6)*2,betaComponents(10)*3
     logical, intent(inout) :: isEnergy
     logical, intent(in) :: printProperties
-    character*3, intent(in), dimension(components) :: indexString
     double precision, allocatable, intent(inout), dimension(:,:,:) :: mainRombergP,secRombergP,TensorP
     integer, intent(in) :: inlop,onlop,components,derivative_order,mF,totalFields
     double precision, dimension(3) :: secP,mainP
     integer :: i,j,k,n_dim
     
     derivative_substr=(/"x","y","z","X","Y","Z"/)
+    dipoleComponents=(/"X  ","Y  ","Z  "/)
+    alphaComponents=(/"XX ","XY ","YY ","XZ ","YZ ","ZZ "/)
+    betaComponents=(/"XXX","XXY","XYY","YYY","XXZ","XYZ","YZZ","XZZ","YZZ","ZZZ"/)
 
     do k=1,3
             !-- Get the properties into a three-layer tensor for the respective derivative computation
@@ -329,16 +332,20 @@ Contains
     
         !-- Print the mainRomberG output values
     do k=1,3
-        write(*,*) ("                         ",indexString(i),i=1,components-1) 
         write(*,*)
+        if (inlop.eq.1) write(*,*) ("                         ",dipoleComponents(i),i=1,components-1) 
+        if (inlop.eq.2) write(*,*) ("                         ",alphaComponents(i),i=1,components-1) 
+        if (inlop.eq.3) write(*,*) ("                         ",betaComponents(i),i=1,components-1) 
         write(*,*) derivative_substr(k+3),"             Value=",(mainRombergP(j,1,k),j=1,components-1)
         write(*,*) derivative_substr(k+3),"    Absolute error=",(mainRombergP(j,2,k),j=1,components-1)
         write(*,*) derivative_substr(k+3),"  RomberG error(%)=",(mainRombergP(j,3,k),j=1,components-1)
     end do
     if (printProperties.eqv..TRUE.) then
         do k=1,3
-            write(*,*) ("                       ",indexString(i),i=1,n_dim) 
             write(*,*)
+            if (inlop.eq.1) write(*,*) ("                         ",dipoleComponents(i),i=1,components-1) 
+            if (inlop.eq.2) write(*,*) ("                         ",alphaComponents(i),i=1,components-1) 
+            if (inlop.eq.3) write(*,*) ("                         ",betaComponents(i),i=1,components-1) 
             write(*,*) derivative_substr(k+3),"             Value=",(secRombergP(j,1,k),j=1,components-1)
             write(*,*) derivative_substr(k+3),"    Absolute error=",(secRombergP(j,2,k),j=1,components-1)
             write(*,*) derivative_substr(k+3),"  RomberG error(%)=",(secRombergP(j,3,k),j=1,components-1)
@@ -375,13 +382,19 @@ double precision, allocatable, dimension (:,:,:) :: mainRombergEnergy,secRomberg
 double precision, allocatable, dimension (:,:,:) :: mainRombergDipole,secRombergDipole
 double precision, allocatable, dimension (:,:,:) :: mainRombergAlpha,secRombergAlpha
 double precision, allocatable, dimension (:,:,:) :: mainRombergBeta,secRombergBeta
+    !-- Best tensors for each property
+double precision, dimension (5,3) :: bestGamma
+double precision, dimension (5,2) :: bestBeta
+double precision, dimension (6) :: bestAlpha
+double precision, dimension (3) :: bestDipole
+double precision :: BestProp
     !-- Dummy matrix to store the properties 
 double precision, dimension (5,2) :: P_general
 double precision :: field_strength
 integer :: indexEnergy,indexDipole,indexAlpha,indexBeta,indexGamma
 integer :: Xindex,Yindex,Zindex,indexBase,indexField
-integer :: stat1,ios,err
-integer :: i,j,k,dummy
+integer :: stat1,ios,err,dummy,errorType
+integer :: i,j,k
 
 type(option_s) :: opts(6)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
@@ -559,17 +572,70 @@ if (inlop.eq.1.and.onlop.eq.4) write(*,*) "                     COMPUTING THE CO
 if (inlop.eq.2.and.onlop.eq.3) write(*,*) "                     COMPUTING THE COMPONENTS OF THE FIRST HYPERPOLARIZABILITY TENSOR FROM THE POLARIZABILITY MATRIX"
 if (inlop.eq.2.and.onlop.eq.4) write(*,*) "                     COMPUTING THE COMPONENTS OF THE SECOND HYPERPOLARIZABILITY TENSOR FROM THE POLARIZABILITY MATRIX"
 if (inlop.eq.3.and.onlop.eq.4) write(*,*) "                     COMPUTING THE COMPONENTS OF THE SECOND HYPERPOLARIZABILITY TENSOR FROM THE FIRST HYPERPOLARIZABILITY TENSOR"
-write(*,*) "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+write(*,*) "---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
 write(*,*)
 
+!#########################################################
+!BestGamma     BestBeta     BestAlpha     BestDipole
+!xxxx          xxx          xx            x
+!xxyx          xxy          yx            y
+!xxyy          yxy          yy            z
+!yxyy          yyy          zx
+!yyyy          xxz          zy
+
+!xxzx          yxz          zz
+!xxzy          yyz
+!yxzy          zxz
+!yyzy          zyz
+!xxzz          zzz
+
+!yxzz
+!yyzz
+!zxzz
+!zyzz
+!zzzz
+!#########################################################
+
     !-- (components+1) because the Romberg data is stored from the second column onwards
-if (inlop.eq.2) then !-- Compute the derivatives of alpha
+errorType=2 !-- errorType.eq.2 uses RombergError, errorType.eq.1 uses AbsoluteError
+if (inlop.eq.3) then !-- Compute the derivatives of beta
+    write(*,*) "Needs to be implemented! Stop!"
+    stop
+    !-- Get best gamma
+else if (inlop.eq.2) then !-- Compute the derivatives of alpha
 
     if (allocated(mainRombergAlpha)) deallocate(mainRombergAlpha)
     if (allocated(secRombergAlpha)) deallocate(secRombergAlpha)
     allocate(mainRombergAlpha(6,3,3)); allocate(secRombergAlpha(6,3,3))
-   !call Reps(isEnergy,printProperties,indexString,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,printProperties,alphaComponents,inlop,onlop,7,derivative_order,mF,totalFields,P_alpha,secRombergAlpha,mainRombergAlpha)
+   !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    call Reps(isEnergy,printProperties,inlop,onlop,7,derivative_order,mF,totalFields,P_alpha,secRombergAlpha,mainRombergAlpha)
+
+        !-- Get the best property tensor from the Romberg values and errors (errorType=2)
+    if (onlop.eq.3) then
+        BestBeta(1,1)=mainRombergAlpha(1,1,1) ! \beta_xxx
+        BestBeta(2,1)=BestProp(mainRombergAlpha(2,1,1),mainRombergAlpha(1,1,2),mainRombergAlpha(2,errorType+1,1),mainRombergAlpha(1,errorType+1,2)) ! \beta_xxy
+        BestBeta(3,1)=BestProp(mainRombergAlpha(3,1,1),mainRombergAlpha(2,1,2),mainRombergAlpha(3,errorType+1,1),mainRombergAlpha(2,errorType+1,2)) ! \beta_xyy
+        BestBeta(4,1)=mainRombergAlpha(3,1,2) ! \beta_yyy
+        BestBeta(5,1)=BestProp(mainRombergAlpha(4,1,1),mainRombergAlpha(1,1,3),mainRombergAlpha(4,errorType+1,1),mainRombergAlpha(1,errorType+1,4)) ! \beta_xxz
+        BestBeta(1,2)=mainRombergAlpha(5,1,1) ! \beta_xyz
+            if (abs(mainRombergAlpha(5,errorType+1,1)).gt.abs(mainRombergAlpha(4,errorType+1,2))) BestBeta(1,2)=mainRombergAlpha(4,1,2)
+            if (abs(mainRombergAlpha(5,errorType+1,1)).gt.abs(mainRombergAlpha(2,errorType+1,3))) BestBeta(1,2)=mainRombergAlpha(2,1,3)
+            if (abs(mainRombergAlpha(4,errorType+1,2)).gt.abs(mainRombergAlpha(2,errorType+1,3))) BestBeta(1,2)=mainRombergAlpha(2,1,3)
+        BestBeta(2,2)=BestProp(mainRombergAlpha(5,1,2),mainRombergAlpha(3,1,3),mainRombergAlpha(5,errorType+1,2),mainRombergAlpha(3,errorType+1,3)) ! \beta_yyz
+        BestBeta(3,2)=BestProp(mainRombergAlpha(6,1,1),mainRombergAlpha(4,1,3),mainRombergAlpha(6,errorType+1,1),mainRombergAlpha(4,errorType+1,3)) ! \beta_xzz
+        BestBeta(4,2)=BestProp(mainRombergAlpha(6,1,2),mainRombergAlpha(5,1,3),mainRombergAlpha(6,errorType+1,2),mainRombergAlpha(5,errorType+1,3)) ! \beta_yzz
+        BestBeta(5,2)=mainRombergAlpha(6,1,3) ! \beta_zzz
+
+    else if (onlop.eq.4) then
+        BestGamma=0.0d0
+        BestGamma(1,1)=mainRombergAlpha(1,1,1) ! \gamma_xxxx
+        BestGamma(3,1)=BestProp(mainRombergAlpha(1,1,2),mainRombergAlpha(3,1,1),mainRombergAlpha(1,errorType+1,2),mainRombergAlpha(3,errorType+1,1)) ! \gamma_xxyy
+        BestGamma(5,1)=mainRombergAlpha(3,1,2) ! \gamma_yyyy
+        BestGamma(5,2)=BestProp(mainRombergAlpha(1,1,3),mainRombergAlpha(6,1,1),mainRombergAlpha(1,errorType+1,3),mainRombergAlpha(6,errorType+1,1)) ! \gamma_xxzz
+        BestGamma(2,3)=BestProp(mainRombergAlpha(3,1,3),mainRombergAlpha(6,1,2),mainRombergAlpha(3,errorType+1,3),mainRombergAlpha(6,errorType+1,2)) ! \gamma_yyzz
+        BestGamma(5,3)=mainRombergAlpha(6,1,3) ! \gamma_zzzz
+
+    end if
 
 else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
 
@@ -577,21 +643,110 @@ else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
     if (allocated(mainRombergDipole)) deallocate(mainRombergDipole)
     if (allocated(secRombergDipole)) deallocate(secRombergDipole)
     allocate (mainRombergDipole(3,3,3)); allocate(secRombergDipole(3,3,3))
-   !call Reps(isEnergy,printProperties,indexString,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,printProperties,dipoleComponents,inlop,onlop,4,derivative_order,mF,totalFields,P_dipole,secRombergDipole,mainRombergDipole)
+   !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    call Reps(isEnergy,printProperties,inlop,onlop,4,derivative_order,mF,totalFields,P_dipole,secRombergDipole,mainRombergDipole)
+
+        !-- Get the best property tensor from the Romberg values and errors (errorType=2)
+    if (onlop.eq.2) then
+        BestAlpha(1)=mainRombergDipole(1,1,1) ! \alpha_xx
+        BestAlpha(2)=BestProp(mainRombergDipole(1,1,2),mainRombergDipole(2,1,1),mainRombergDipole(1,errorType+1,2),mainRombergDipole(2,errorType+1,1)) ! \alpha_xy
+        BestAlpha(3)=mainRombergDipole(2,1,2) ! \alpha_yy
+        BestAlpha(4)=BestProp(mainRombergDipole(1,1,3),mainRombergDipole(3,1,1),mainRombergDipole(1,errorType+1,3),mainRombergDipole(3,errorType+1,1)) ! \alpha_xz
+        BestAlpha(5)=BestProp(mainRombergDipole(2,1,3),mainRombergDipole(3,1,2),mainRombergDipole(2,errorType+1,3),mainRombergDipole(3,errorType+1,2)) ! \alpha_yz
+        BestAlpha(6)=mainRombergDipole(3,1,3) ! \alpha_zz
+
+    else if (onlop.eq.3) then
+        BestBeta=0.0d0
+        BestBeta(1,1)=mainRombergDipole(1,1,1) ! \beta_xxx
+        BestBeta(2,1)=mainRombergDipole(2,1,1) ! \beta_xxy
+        BestBeta(3,1)=mainRombergDipole(1,1,2) ! \beta_xyy
+        BestBeta(4,1)=mainRombergDipole(2,1,2) ! \beta_yyy
+        BestBeta(5,1)=mainRombergDipole(3,1,1) ! \beta_xxz
+        BestBeta(2,2)=mainRombergDipole(3,1,2) ! \beta_yyz
+        BestBeta(3,2)=mainRombergDipole(1,1,3) ! \beta_xzz
+        BestBeta(4,2)=mainRombergDipole(2,1,3) ! \beta_yzz
+        BestBeta(5,2)=mainRombergDipole(3,1,3) ! \beta_zzz 
+
+    else if (onlop.eq.4) then
+        BestGamma=0.0d0
+        BestGamma(1,1)=mainRombergDipole(1,1,1) ! \gamma_xxxx
+        BestGamma(2,1)=mainRombergDipole(2,1,1) ! \gamma_xxxy
+        BestGamma(4,1)=mainRombergDipole(1,1,2) ! \gamma_xyyy
+        BestGamma(5,1)=mainRombergDipole(2,1,2) ! \gamma_yyyy
+        BestGamma(1,2)=mainRombergDipole(3,1,1) ! \gamma_xxxz
+        BestGamma(4,2)=mainRombergDipole(3,1,2) ! \gamma_yyyz
+        BestGamma(3,3)=mainRombergDipole(1,1,3) ! \gamma_xzzz
+        BestGamma(4,3)=mainRombergDipole(2,1,3) ! \gamma_yzzz
+        BestGamma(5,3)=mainRombergDipole(3,1,3) ! \gamma_zzzz
+
+    end if
 
 else if (inlop.eq.0) then !-- Compute the derivatives of the energy
 
     if (allocated(mainRombergEnergy)) deallocate(mainRombergEnergy)
     if (allocated(secRombergEnergy)) deallocate(secRombergEnergy)
     allocate (mainRombergEnergy(3,3,3)); allocate(secRombergEnergy(3,3,3))
-   !call Reps(isEnergy,printProperties,indexString,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,printProperties,dipoleComponents,inlop,onlop,2,derivative_order,mF,totalFields,P_energy,secRombergEnergy,mainRombergEnergy)
+   !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    call Reps(isEnergy,printProperties,inlop,onlop,2,derivative_order,mF,totalFields,P_energy,secRombergEnergy,mainRombergEnergy)
+
+        !-- Get the best property tensor from the Romberg values and errors (errorType=2)
+    if (onlop.eq.1) then ! \mu_x/y/z
+        BestDipole(1)=mainRombergEnergy(1,1,1)
+        BestDipole(2)=mainRombergEnergy(1,1,2)
+        BestDipole(3)=mainRombergEnergy(1,1,3) 
+
+    else if (onlop.eq.2) then ! \alpha_xx/yy/zz
+        BestAlpha=0.0d0
+        BestAlpha(1)=mainRombergEnergy(1,1,1)
+        BestAlpha(3)=mainRombergEnergy(1,1,2)
+        BestAlpha(6)=mainRombergEnergy(1,1,3) 
+
+    else if (onlop.eq.3) then ! \beta_xxx/yyy/zzz
+        BestBeta=0.0d0
+        BestBeta(1,1)=mainRombergEnergy(1,1,1)
+        BestBeta(4,1)=mainRombergEnergy(1,1,2)
+        BestBeta(5,2)=mainRombergEnergy(1,1,3) 
+
+    else if (onlop.eq.4) then ! \gamma_xxxx/yyyy/zzzz
+        BestGamma=0.0d0
+        BestGamma(1,1)=mainRombergEnergy(1,1,1)
+        BestGamma(5,1)=mainRombergEnergy(1,1,2)
+        BestGamma(5,3)=mainRombergEnergy(1,1,3) 
+
+    end if
 
 end if
 
     !-- Computing the isotropic values
-write(*,*) "Polla"
+if (doIsotropic.eqv..TRUE.) then
+    write(*,*) "Polla isotropica"
+    if (onlop.eq.2) then
+        !-- Compute the isotropic polarizability
+
+    else if (onlop.eq.3) then
+        !-- Compute the isotropic first hyperpolarizability
+
+    else if (onlop.eq.4) then
+        !-- Compute the isotropic second hyperpolarizability
+
+    end if
+else if (doLongitudinal.eqv..TRUE.) then
+    write(*,*) "Longitudinal polla"
+    if (onlop.eq.2) then
+        !-- Get the longitudinal polarizability
+
+    else if (onlop.eq.3) then
+        !-- Get the longitudinal first hyperpolarizability
+
+    else if (onlop.eq.4) then
+        !-- Get the longitudinal second hyperpolarizability
+
+    end if
+end if
+write(*,*)
+write(*,*) "RomberG - Romberg procedure done!"
+write(*,*)
+
 End program
 
 Subroutine CatchProperties(optarg,substr1,substr2,substr3,indexP,isP)
@@ -607,3 +762,13 @@ indexP=indexP+index(optarg,trim(substr3))
 if(indexP.gt.0) isP = .TRUE.
 
 End subroutine CatchProperties
+
+Function BestProp(aP,bP,aE,bE)
+implicit none
+double precision :: BestProp,aP,bP,aE,bE
+
+BestProp=aP
+if (abs(aE).gt.abs(bE)) BestProp=bP
+
+End function BestProp
+
