@@ -386,8 +386,13 @@ double precision, allocatable, dimension (:,:,:) :: mainRombergBeta,secRombergBe
 double precision, dimension (5,3) :: bestGamma
 double precision, dimension (5,2) :: bestBeta
 double precision, dimension (6) :: bestAlpha
-double precision, dimension (3) :: bestDipole
+double precision, dimension (3) :: bestDipole,tmpDipole
 double precision :: BestProp
+    !-- Output values
+double precision, dimension (3,3,3,3) :: Gamma
+double precision, dimension (3,3,3) :: Beta
+double precision, dimension (3,3) :: Alpha
+double precision :: dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel,gamma_average,deltaAlpha
     !-- Dummy matrix to store the properties 
 double precision, dimension (5,2) :: P_general
 double precision :: field_strength
@@ -396,14 +401,15 @@ integer :: Xindex,Yindex,Zindex,indexBase,indexField
 integer :: stat1,ios,err,dummy,errorType
 integer :: i,j,k
 
-type(option_s) :: opts(6)
+type(option_s) :: opts(7)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
 opts(1) = option_s("input",.TRUE.,"i")
 opts(2) = option_s("output",.TRUE.,"o")
 opts(3) = option_s("longitudinal",.FALSE.,"l")
 opts(4) = option_s("isotropic",.FALSE.,"I")
-opts(5) = option_s("positive-fields",.TRUE.,"F")
-opts(6) = option_s("P",.FALSE.,"p")
+opts(5) = option_s("totalfields",.TRUE.,"F")
+opts(6) = option_s("printP",.FALSE.,"p")
+opts(7) = option_s("help",.FALSE.,"h")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
 dipoleComponents=(/"X  ","Y  ","Z  "/)
@@ -411,8 +417,12 @@ alphaComponents=(/"XX ","XY ","YY ","XZ ","YZ ","ZZ "/)
 betaComponents=(/"XXX","XXY","XYY","YYY","XXZ","XYZ","YZZ","XZZ","YZZ","ZZZ"/)
 
 if (command_argument_count().le.1) then
-    write(*,*) "$ man RomberG.f95"
+    write(*,*)
     write(*,*) "./ROMBERG.exe {options} {name_of_the_molecule}"
+    write(*,*)
+    write(*,*) " To display the help message execute:"
+    write(*,*) "./ROMBERG.exe --help {name_of_the_molecule}"
+    write(*,*)
     stop
 end if
 
@@ -471,7 +481,7 @@ do
             if (isBeta.eqv..TRUE.)   onlop=3
             if (isGamma.eqv..TRUE.)  onlop=4
 
-        case("F","total-fields")
+        case("F","totalfields")
             read(optarg,*) totalFields
             positiveFields=(totalFields-1)/2
             negativeFields=positiveFields
@@ -483,12 +493,23 @@ do
         case("I","isotropic")
             doIsotropic=.TRUE.
 
-        case("p","P")
+        case("p","printP")
             printProperties=.TRUE.
 
-        case("h")
-            !-- To do
-            write(*,*) "Help"
+        case("h","help")
+            write(*,*)
+            write(*,*) " Several optionalities are available for RomberG.exe:"
+            write(*,*) "    -i, --input          :   Input property - Energy/energy/E ; Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B"
+            write(*,*) "    -o, --output         :   Output property - Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B ; Gamma/gamma/G"
+            write(*,*) "    -F, --totalfields    :   Number of total fields probed. Integer required."
+            write(*,*) "    -l, --longitudinal   :   Whether to compute longitudinal properties or not."
+            write(*,*) "    -I, --isotropic      :   Whether to compute isotropic properties or not."
+            write(*,*) "    -p, --printP         :   Print the derivatives when computing the Romberg triangle for each component."
+            write(*,*) "    -h, --help           :   Displays this message."
+            write(*,*)
+            write(*,*) " REMEMBER: The execution of RomberG.exe requires the name of the molecule, even for displaying this message."
+            write(*,*) 
+            stop
     end select
 end do
 
@@ -626,6 +647,9 @@ else if (inlop.eq.2) then !-- Compute the derivatives of alpha
         BestBeta(4,2)=BestProp(mainRombergAlpha(6,1,2),mainRombergAlpha(5,1,3),mainRombergAlpha(6,errorType+1,2),mainRombergAlpha(5,errorType+1,3)) ! \beta_yzz
         BestBeta(5,2)=mainRombergAlpha(6,1,3) ! \beta_zzz
 
+            !-- Transform the BestBeta matrix into the first hyperpolarizability tensor
+        call Beta2Beta(BestBeta,Beta)
+ 
     else if (onlop.eq.4) then
         BestGamma=0.0d0
         BestGamma(1,1)=mainRombergAlpha(1,1,1) ! \gamma_xxxx
@@ -634,6 +658,9 @@ else if (inlop.eq.2) then !-- Compute the derivatives of alpha
         BestGamma(5,2)=BestProp(mainRombergAlpha(1,1,3),mainRombergAlpha(6,1,1),mainRombergAlpha(1,errorType+1,3),mainRombergAlpha(6,errorType+1,1)) ! \gamma_xxzz
         BestGamma(2,3)=BestProp(mainRombergAlpha(3,1,3),mainRombergAlpha(6,1,2),mainRombergAlpha(3,errorType+1,3),mainRombergAlpha(6,errorType+1,2)) ! \gamma_yyzz
         BestGamma(5,3)=mainRombergAlpha(6,1,3) ! \gamma_zzzz
+
+            !-- Transform the BestGamma matrix into the second hyperpolarizability tensor
+        call Beta2Beta(BestGamma,Gamma)
 
     end if
 
@@ -655,6 +682,9 @@ else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
         BestAlpha(5)=BestProp(mainRombergDipole(2,1,3),mainRombergDipole(3,1,2),mainRombergDipole(2,errorType+1,3),mainRombergDipole(3,errorType+1,2)) ! \alpha_yz
         BestAlpha(6)=mainRombergDipole(3,1,3) ! \alpha_zz
 
+            !-- Transform the BestAlpha vector into the symmetric polarizability matrix
+        call Alpha2Alpha(BestAlpha,Alpha)
+
     else if (onlop.eq.3) then
         BestBeta=0.0d0
         BestBeta(1,1)=mainRombergDipole(1,1,1) ! \beta_xxx
@@ -667,6 +697,9 @@ else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
         BestBeta(4,2)=mainRombergDipole(2,1,3) ! \beta_yzz
         BestBeta(5,2)=mainRombergDipole(3,1,3) ! \beta_zzz 
 
+            !-- Transform the BestBeta matrix into the symmetric hyperpolarizability tensor
+        call Beta2Beta(BestBeta,Beta)
+
     else if (onlop.eq.4) then
         BestGamma=0.0d0
         BestGamma(1,1)=mainRombergDipole(1,1,1) ! \gamma_xxxx
@@ -678,6 +711,9 @@ else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
         BestGamma(3,3)=mainRombergDipole(1,1,3) ! \gamma_xzzz
         BestGamma(4,3)=mainRombergDipole(2,1,3) ! \gamma_yzzz
         BestGamma(5,3)=mainRombergDipole(3,1,3) ! \gamma_zzzz
+
+            !-- Transform the BestGamma matrix into the symmetric hyperpolarizability second order tensor
+        call Gamma2Gamma(BestGamma,Gamma)
 
     end if
 
@@ -701,11 +737,17 @@ else if (inlop.eq.0) then !-- Compute the derivatives of the energy
         BestAlpha(3)=mainRombergEnergy(1,1,2)
         BestAlpha(6)=mainRombergEnergy(1,1,3) 
 
+            !-- Transform the BestAlpha vector into the symmetric polarizability matrix
+        call Alpha2Alpha(BestAlpha,Alpha)
+
     else if (onlop.eq.3) then ! \beta_xxx/yyy/zzz
         BestBeta=0.0d0
         BestBeta(1,1)=mainRombergEnergy(1,1,1)
         BestBeta(4,1)=mainRombergEnergy(1,1,2)
         BestBeta(5,2)=mainRombergEnergy(1,1,3) 
+
+            !-- Transform the BestBeta matrix into the symmetric hyperpolarizability tensor
+        call Beta2Beta(BestBeta,Beta)
 
     else if (onlop.eq.4) then ! \gamma_xxxx/yyyy/zzzz
         BestGamma=0.0d0
@@ -713,33 +755,129 @@ else if (inlop.eq.0) then !-- Compute the derivatives of the energy
         BestGamma(5,1)=mainRombergEnergy(1,1,2)
         BestGamma(5,3)=mainRombergEnergy(1,1,3) 
 
+            !-- Transform the BestGamma matrix into the symmetric hyperpolarizability second order tensor
+        call Gamma2Gamma(BestGamma,Gamma)
+
     end if
 
 end if
 
-    !-- Computing the isotropic values
-if (doIsotropic.eqv..TRUE.) then
-    write(*,*) "Polla isotropica"
-    if (onlop.eq.2) then
-        !-- Compute the isotropic polarizability
+close(unit=4)
+
+    !-- Grepping the static dipole moment for -o alpha/beta/gamma calculations
+if (onlop.ne.0) then
+
+end if
+
+    !-- Computing the longitudinal properties and other common values
+!dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel
+write(*,*) doIsotropic
+if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
+    write(*,*) doIsotropic
+    if (onlop.eq.1) then
+            !-- Get the longitudinal vector
+        dipole_module=dsqrt(BestDipole(1)**2.0d0+BestDipole(2)**2.0d0+BestDipole(3)**2.0d0)
+        write(*,'(" RomberG - Dipole moment vector (μX,μY,μZ) = ("xF10.6,",",xF10.6,",",xF10.6,")")') BestDipole(1),BestDipole(2),BestDipole(3)
+        write(*,'(" RomberG - The modulus of the dipole moment is",xF10.6" a.u.")') dipole_module
+
+    else if (onlop.eq.2) then
+            !-- Get the longitudinal polarizability: 10.1021/jp405144f
+        alpha_average=(BestAlpha(1)+BestAlpha(3)+BestAlpha(6))/3.0d0
+        write(*,'(" RomberG - Elements of the polarizability matrix (αXX,αXY,αYY,αXZ,αYZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6)') &
+        & BestAlpha(1),BestAlpha(2),BestAlpha(3),BestAlpha(4),BestAlpha(5)
+        write(*,'(" RomberG - Elements of the polarizability matrix                 (αZZ) =",xF10.6,")")') BestAlpha(6)
+        write(*,'(" RomberG - The average polarizability is ",xF10.6" a.u.")') alpha_average
 
     else if (onlop.eq.3) then
-        !-- Compute the isotropic first hyperpolarizability
+            !-- Get the longitudinal first hyperpolarizability
+        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXXX,βXXY,βXYY,βYYY,βXXZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        & BestBeta(1,1),BestBeta(2,1),BestBeta(3,1),BestBeta(4,1),BestBeta(5,1)
+        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXYZ,βYYZ,βXZZ,βYZZ,βZZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        & BestBeta(1,2),BestBeta(2,2),BestBeta(3,2),BestBeta(4,2),BestBeta(5,2)
 
     else if (onlop.eq.4) then
-        !-- Compute the isotropic second hyperpolarizability
+            !-- Get the longitudinal second hyperpolarizability
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        & BestGamma(1,1),BestGamma(2,1),BestGamma(3,1),BestGamma(4,1),BestGamma(5,1)
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        & BestGamma(1,2),BestGamma(2,2),BestGamma(3,2),BestGamma(4,2),BestGamma(5,2)
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        & BestGamma(1,3),BestGamma(2,3),BestGamma(3,3),BestGamma(4,3),BestGamma(5,3)
 
     end if
-else if (doLongitudinal.eqv..TRUE.) then
-    write(*,*) "Longitudinal polla"
+end if
+
+    !-- Computing the isotropic values
+if (doIsotropic.eqv..TRUE.) then
     if (onlop.eq.2) then
-        !-- Get the longitudinal polarizability
+            !-- Compute the isotropic polarizability
+
+            !-- Compute deltaAlpha: 10.1007/s42452-025-07291-9
+        deltaAlpha=dsqrt(Alpha(1,1)-Alpha(2,2)**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+12.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
+        !deltaAlpha=dsqrt(Alpha(1,1)-Alpha(2,2)**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+24.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
+        deltaAlpha=deltaAlpha*(dsqrt(2.0d0)/2.0d0)
 
     else if (onlop.eq.3) then
-        !-- Get the longitudinal first hyperpolarizability
+            !-- Compute different values for the isotropic first hyperpolarizability
+        
+            !-- Get the dipole moment of the zeroth field to compute the Beta4
+        call system("rm tmpDipole0.nlop")
+        call system("cd $(pwd)/"//mol_name//" ; grep -A 1 'Dipole' *.fchk > tmpDipole0.nlop; sed -i '/Dipole/d' tmpDipole0.nlop; cp tmpDipole0.nlop ../")
+        open (unit=44,file="tmpDipole0.nlop",status="old")
+        read(44,*,iostat=ios) line,tmpDipole(1),tmpDipole(2),tmpDipole(3)
+        close(unit=44)
+        tmpDipModulus=dsqrt(tmpDipole(1)**2.0d0+tmpDipole(2)**2.0d0+tmpDipole(3)**2.0d0)
+
+            !-- Vectorial hyperpolarizability
+        beta_vec=0.0d0
+        do i=1,3
+            do j=1,3
+                beta_vec=beta_vec+Beta(i,j,j)
+            end do
+            beta_vec=beta_vec**2.0d0
+        end do
+        beta_vec=dsqrt(beta_vec)
+
+            !-- Parallel hyperpolarizability: J. Chem. Phys. 130, 194108 2009
+        beta_parallel=0.0d0
+        do i=1,3
+            do j=1,3
+                 beta_parallel=beta_parallel+tmpDipole(i)*Beta(i,j,j)
+            end do
+        end do
+        beta_parallel=3.0d0*beta_parallel/(5.0d0*tmpDipModulus)
+
+            !-- "Beta4" from 10.1021/acs.jpca.5c00383; equivalent to parallel hyperpolarizability but without a factor
+        beta_4=0.0d0
+        do i=1,3
+            do j=1,3
+               beta_4=beta_4+Beta(i,j,j)*tmpDipole(i) 
+            end do
+        end do
+        beta_4=beta_4/tmpDipModulus
+
 
     else if (onlop.eq.4) then
-        !-- Get the longitudinal second hyperpolarizability
+
+            !-- Compute the parallel second hyperpolarizability
+        gamma_parallel=0.0d0
+        do i=1,3
+            do j=1,3
+                gamma_parallel=gamma_parallel+Gamma(i,i,j,j)
+            end do
+        end do    
+        gamma_parallel=gamma_parallel/5.0d0
+
+            !-- Compute the average second hyperpolarizability: 10.1007/s42452-025-07291-9
+        gamma_average=BestGamma(1,1)+BestGamma(5,1)+BestGamma(5,3)
+            !\gamma_xxyy+\gamma_xxzz+\gamma_yyzz
+        do i=1,2
+            do j=2,3
+                if (i.eq.j) cycle
+                    !\gamma_average=gamma_average+2.0d0(\gamma_xxyy+\gamma_xxzz+\gamma_yyzz), but iijj==ijij=ijji=jjii=... -> \gamma_average=\gamma_average+2.0d0*(6.0d0*\gamma_xxyy+...)
+                gamma_average=gamma_average+12.0d0*Gamma(i,i,j,j)
+            end do
+        end do
 
     end if
 end if
@@ -772,3 +910,125 @@ if (abs(aE).gt.abs(bE)) BestProp=bP
 
 End function BestProp
 
+Subroutine Alpha2Alpha(Best,Symmetric)
+implicit none
+double precision, intent(in), dimension(6) :: Best
+double precision, intent(out), dimension(3,3) :: Symmetric
+
+    !-- Diagonal elements
+Symmetric(1,1)=Best(1) !\alpha_xx
+Symmetric(2,2)=Best(3) !\alpha_yy
+Symmetric(3,3)=Best(6) !\alpha_zz
+
+    !-- Off-diagonal elements
+Symmetric(1,2)=Best(2) !\alpha_xy
+Symmetric(2,1)=Best(2) !\alpha_yx
+Symmetric(1,3)=Best(4) !\alpha_xz
+Symmetric(3,1)=Best(4) !\alpha_zx
+Symmetric(2,3)=Best(5) !\alpha_yz
+Symmetric(3,2)=Best(5) !\alpha_yz
+
+End subroutine
+
+Subroutine Beta2Beta(Best,Symmetric)
+implicit none
+double precision, intent(in), dimension(5,2) :: Best
+double precision, intent(out), dimension(3,3,3) :: Symmetric
+
+    !-- Diagonal elements
+Symmetric(1,1,1)=Best(1,1) !\beta_xxx
+Symmetric(2,2,2)=Best(4,1) !\beta_yyy
+Symmetric(3,3,3)=Best(5,2) !\beta_zzz
+
+    !-- Off-diagonal elements
+Symmetric(1,1,2)=Best(2,1) !\beta_xxy
+Symmetric(1,2,2)=Best(3,1) !\beta_xyy
+Symmetric(1,1,3)=Best(5,1) !\beta_xxz
+Symmetric(1,2,3)=Best(1,2) !\beta_xyz
+Symmetric(2,2,3)=Best(2,2) !\beta_yyz
+Symmetric(1,3,3)=Best(3,2) !\beta_xzz
+Symmetric(2,3,3)=Best(4,2) !\beta_yzz
+
+    !-- Transposition of the elements
+                        !xxy
+Symmetric(2,1,1)=Symmetric(1,1,2);Symmetric(1,2,1)=Symmetric(1,1,2)
+                        !xyy
+Symmetric(2,1,2)=Symmetric(1,2,2);Symmetric(2,2,1)=Symmetric(1,2,2)
+                        !xxz
+Symmetric(3,1,1)=Symmetric(1,1,3);Symmetric(1,3,1)=Symmetric(1,1,3)
+                        !yyz
+Symmetric(3,2,2)=Symmetric(2,2,3);Symmetric(2,3,2)=Symmetric(2,2,3)
+                        !xzz
+Symmetric(3,1,3)=Symmetric(1,3,3);Symmetric(3,3,1)=Symmetric(1,3,3)
+                        !yzz
+Symmetric(3,3,2)=Symmetric(2,3,3);Symmetric(3,2,3)=Symmetric(2,3,3)
+                        !xyz
+Symmetric(1,3,2)=Symmetric(1,2,3);Symmetric(2,1,3)=Symmetric(1,2,3)
+Symmetric(2,3,1)=Symmetric(1,2,3);Symmetric(3,1,2)=Symmetric(1,2,3)
+Symmetric(3,2,1)=Symmetric(1,2,3)
+
+End subroutine
+
+Subroutine Gamma2Gamma(Best,Symmetric)
+implicit none
+double precision, intent(in), dimension(5,3) :: Best
+double precision, intent(out), dimension(3,3,3,3) :: Symmetric
+
+    !-- Diagonal elements
+Symmetric(1,1,1,1)=Best(1,1) !\gamma_xxxx
+Symmetric(2,2,2,2)=Best(5,1) !\gamma_yyyy
+Symmetric(3,3,3,3)=Best(5,3) !\gamma_zzzz
+
+    !-- Off-diagonal elements
+Symmetric(1,1,2,1)=Best(2,1) !\gamma_xxyx
+Symmetric(1,1,2,2)=Best(3,1) !\gamma_xxyy
+Symmetric(2,1,2,2)=Best(4,1) !\gamma_yxyy
+Symmetric(1,1,3,1)=Best(1,2) !\gamma_xxzx
+Symmetric(1,1,3,2)=Best(2,2) !\gamma_xxzy
+Symmetric(2,1,3,2)=Best(3,2) !\gamma_yxzy
+Symmetric(2,2,3,2)=Best(4,2) !\gamma_yyzy
+Symmetric(1,1,3,3)=Best(5,2) !\gamma_xxzz
+Symmetric(2,1,3,3)=Best(1,3) !\gamma_yxzz
+Symmetric(2,2,3,3)=Best(2,3) !\gamma_yyzz
+Symmetric(3,1,3,3)=Best(3,3) !\gamma_zxzz
+Symmetric(3,2,3,3)=Best(4,3) !\gamma_zyzz
+
+    !-- Transposition of the elements
+                        !xxyx
+Symmetric(2,1,1,1)=Symmetric(1,1,2,1);Symmetric(1,2,1,1)=Symmetric(1,1,2,1);Symmetric(1,1,1,2)=Symmetric(1,1,2,1)
+                        !yxyy
+Symmetric(1,2,2,2)=Symmetric(2,1,2,2);Symmetric(2,2,1,2)=Symmetric(2,1,2,2);Symmetric(2,2,2,1)=Symmetric(2,2,1,2)
+                        !xxzx
+Symmetric(3,1,1,1)=Symmetric(1,1,3,1);Symmetric(1,3,1,1)=Symmetric(1,1,3,1);Symmetric(1,1,1,3)=Symmetric(1,3,1,1)
+                        !yyzy
+Symmetric(3,2,2,2)=Symmetric(2,2,3,2);Symmetric(2,3,2,2)=Symmetric(2,2,3,2);Symmetric(2,2,2,3)=Symmetric(2,2,3,2)
+                        !zxzz
+Symmetric(1,3,3,3)=Symmetric(3,1,3,3);Symmetric(3,3,1,3)=Symmetric(3,1,3,3);Symmetric(3,3,3,1)=Symmetric(3,3,1,3)
+                        !zyzz
+Symmetric(2,3,3,3)=Symmetric(3,2,3,3);Symmetric(3,3,2,3)=Symmetric(3,2,3,3);Symmetric(3,3,3,2)=Symmetric(3,3,2,3)
+                        !xxyy
+Symmetric(1,2,1,2)=Symmetric(1,1,2,2);Symmetric(1,2,2,1)=Symmetric(1,1,2,2);Symmetric(2,1,1,2)=Symmetric(1,1,2,2)
+Symmetric(2,1,2,1)=Symmetric(1,1,2,2);Symmetric(2,2,1,1)=Symmetric(1,1,2,2)
+                        !xxzz
+Symmetric(1,3,1,3)=Symmetric(1,1,3,3);Symmetric(1,3,3,1)=Symmetric(1,1,3,3);Symmetric(3,1,1,3)=Symmetric(1,1,3,3)
+Symmetric(3,1,3,1)=Symmetric(1,1,3,3);Symmetric(3,3,1,1)=Symmetric(1,1,3,3)
+                        !yyzz
+Symmetric(2,3,2,3)=Symmetric(2,2,3,3);Symmetric(2,3,3,2)=Symmetric(2,2,3,3);Symmetric(3,2,2,3)=Symmetric(2,2,3,3)
+Symmetric(3,1,3,1)=Symmetric(2,2,3,3);Symmetric(3,3,2,2)=Symmetric(2,2,3,3)
+                        !xxzy
+Symmetric(1,1,2,3)=Symmetric(1,1,3,2);Symmetric(1,2,1,3)=Symmetric(1,1,3,2);Symmetric(1,2,3,1)=Symmetric(1,1,3,2)
+Symmetric(1,3,1,2)=Symmetric(1,1,3,2);Symmetric(1,3,2,1)=Symmetric(1,1,3,2);Symmetric(2,1,1,3)=Symmetric(1,1,3,2)
+Symmetric(2,1,3,1)=Symmetric(1,1,3,2);Symmetric(3,1,1,2)=Symmetric(1,1,3,2);Symmetric(3,1,2,1)=Symmetric(1,1,3,2)
+Symmetric(3,2,1,1)=Symmetric(1,1,3,2);Symmetric(2,3,1,1)=Symmetric(1,1,3,2)
+                        !yxzy
+Symmetric(1,2,2,3)=Symmetric(2,1,3,2);Symmetric(1,2,3,2)=Symmetric(2,1,3,2);Symmetric(1,3,2,2)=Symmetric(2,1,3,2)
+Symmetric(2,2,3,1)=Symmetric(2,1,3,2);Symmetric(2,3,1,2)=Symmetric(2,1,3,2);Symmetric(2,3,2,1)=Symmetric(2,1,3,2)
+Symmetric(3,1,2,2)=Symmetric(2,1,3,2);Symmetric(3,2,1,2)=Symmetric(2,1,3,2);Symmetric(3,2,2,1)=Symmetric(2,1,3,2)
+Symmetric(2,1,2,3)=Symmetric(2,1,3,2);Symmetric(2,2,1,3)=Symmetric(2,1,3,2)
+                        !yxzz
+Symmetric(1,2,3,3)=Symmetric(2,1,3,3);Symmetric(1,3,2,3)=Symmetric(2,1,3,3);Symmetric(1,3,3,2)=Symmetric(2,1,3,3)
+Symmetric(2,3,1,3)=Symmetric(2,1,3,3);Symmetric(2,3,3,1)=Symmetric(2,1,3,3);Symmetric(3,1,2,3)=Symmetric(2,1,3,3)
+Symmetric(3,1,3,2)=Symmetric(2,1,3,3);Symmetric(3,2,1,3)=Symmetric(2,1,3,3);Symmetric(3,2,3,1)=Symmetric(2,1,3,3)
+Symmetric(3,3,1,2)=Symmetric(2,1,3,3);Symmetric(3,3,2,1)=Symmetric(2,1,3,3)
+
+End subroutine
