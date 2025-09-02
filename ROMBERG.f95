@@ -762,16 +762,8 @@ else if (inlop.eq.0) then !-- Compute the derivatives of the energy
 
 end if
 
-close(unit=4)
-
-    !-- Grepping the static dipole moment for -o alpha/beta/gamma calculations
-if (onlop.ne.0) then
-
-end if
-
     !-- Computing the longitudinal properties and other common values
 !dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel
-write(*,*) doIsotropic
 if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
     write(*,*) doIsotropic
     if (onlop.eq.1) then
@@ -825,7 +817,6 @@ if (doIsotropic.eqv..TRUE.) then
         call system("cd $(pwd)/"//mol_name//" ; grep -A 1 'Dipole' *.fchk > tmpDipole0.nlop; sed -i '/Dipole/d' tmpDipole0.nlop; cp tmpDipole0.nlop ../")
         open (unit=44,file="tmpDipole0.nlop",status="old")
         read(44,*,iostat=ios) line,tmpDipole(1),tmpDipole(2),tmpDipole(3)
-        close(unit=44)
         tmpDipModulus=dsqrt(tmpDipole(1)**2.0d0+tmpDipole(2)**2.0d0+tmpDipole(3)**2.0d0)
 
             !-- Vectorial hyperpolarizability
@@ -881,6 +872,10 @@ if (doIsotropic.eqv..TRUE.) then
 
     end if
 end if
+    !-- Closing units and removing .nlop files, they are still stored on the molecule directory
+close(unit=4)
+close(unit=44)
+call system("rm *.nlop")
 write(*,*)
 write(*,*) "RomberG - Romberg procedure done!"
 write(*,*)
