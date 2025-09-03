@@ -1,3 +1,5 @@
+Please read the Documentation.pdf file to have the whole information of how RomberG.exe works. In this README file only the very superficial snippets are provided.
+
 +  Several prerequisites to execute RomberG: 
     -  Have performed all the calculations in Gaussian, the NLOP are read from their respective .fchk file.
     -  Have all the fchk files into a folder under the molecule's name - all data extraction will be performed from there.
