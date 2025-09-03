@@ -537,13 +537,13 @@ else if (inlop.eq.1) then
 else if (inlop.eq.2) then
     isEnergy=.FALSE.
     call system("rm isAlpha.nlop")
-    call system("cd $(pwd)/"//mol_name//" ; grep -A 2 'Polarizability' *.fchk > isAlpha.nlop; sed -i '/Polarizability/d' isAlpha.nlop; cp isAlpha.nlop ../")
+    call system("cd $(pwd)/"//mol_name//" ; sed -i 's/HyperPolarizability/Hyperpolarizability/g' *.fchk; grep -A 2 'Polarizability' *.fchk > isAlpha.nlop; sed -i '/Polarizability/d' isAlpha.nlop; cp isAlpha.nlop ../")
     open (unit=4,file="isAlpha.nlop",status="old")
 else if (inlop.eq.3) then
         !-- Remember that for beta the sign is changed with respect to the regular convetion!
     isEnergy=.FALSE.
     call system("rm isBeta.nlop")
-    call system("cd $(pwd)/"//mol_name//" ; grep -A 2 'Hyperpolarizability' *.fchk > isBeta.nlop; sed -i '/Hyperpolarizability/d' isBeta.nlop; cp isBeta.nlop ../")
+    call system("cd $(pwd)/"//mol_name//" ; grep -A 2 'HyperPolarizability' *.fchk > isBeta.nlop; sed -i '/HyperPolarizability/d' isBeta.nlop; cp isBeta.nlop ../")
     open (unit=4,file="isBeta.nlop",status="old")
 end if
 
@@ -875,7 +875,7 @@ end if
     !-- Closing units and removing .nlop files, they are still stored on the molecule directory
 close(unit=4)
 close(unit=44)
-call system("rm *.nlop")
+!call system("rm *.nlop")
 write(*,*)
 write(*,*) "RomberG - Romberg procedure done!"
 write(*,*)
