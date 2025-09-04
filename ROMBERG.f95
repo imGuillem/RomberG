@@ -78,8 +78,7 @@ Contains
     double precision, dimension(5,2) :: P_general
     double precision, allocatable, intent(out), dimension(:,:,:) :: TensorP
 
-    !-- Acabar d'adaptar per pillar d'input l'energia i el moment dipolar
-
+        !-- Allocate the dummy TensorP to store all the properties along with their respective fields
     if (inlop.eq.0) allocate(TensorP(totalFields,2,3))    
     if (inlop.eq.1) allocate(TensorP(totalFields,4,3))   
     if (inlop.eq.2) allocate(TensorP(totalFields,7,3))   
@@ -104,13 +103,11 @@ Contains
             read(postLine,*,iostat=ios,end=1927) P_general(1,1),P_general(2,1),P_general(3,1),P_general(4,1),P_general(5,1)
         if (inlop.ne.0) read(4,'(A)',iostat=ios) line
             1927 continue
-            !write(*,*) line
             if (inlop.ne.0) call ReadValues(inlop,line,len_trim(line),isEnergy,".fchk-",".fchk:",substr1,substr2,field_direction,field_strength,postLine)
 
                 !-- Condition only applicable for alpha (only P_general(1,2)) and beta (P_general(1:5,2))
             if (inlop.ge.2) read(postLine,*,iostat=ios) P_general(1,2),P_general(2,2),P_general(3,2),P_general(4,2),P_general(5,2)
         read(4,*,iostat=ios,end=1612) line
-            !write(*,*) line
 
             !-- Has to be specifically adapted to consider the change of sign of the beta tensor.
         1612 continue
@@ -129,7 +126,6 @@ Contains
             if (inlop.eq.2) TensorP(mF+nF,7,level)=P_general(1,2)
             if (inlop.eq.3) TensorP(mF+nF,7:11,level)=-1.0d0*P_general(1:5,2)
         end if
-
     end do
 
     End subroutine DeclareProperties
@@ -152,7 +148,7 @@ Contains
     integer :: i,j
 
         !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
-
+        
     if(allocated(FF)) deallocate(FF)
     if (o_derivative.le.2) then
         allocate(FF(mF-1))
@@ -163,37 +159,34 @@ Contains
     end if
     if (inlop.eq.0) energyDerivative=-1.0d0 
 
-        !-- String variables to parse into Romberg for printing
+        !-- String variables to parse into RomberG for printing
     dipoleComponents=(/"X","Y","Z"/)
     alphaComponents=(/"XX","XY","YY","XZ","YZ","ZZ"/)
     betaComponents=(/"XXX","XXY","XYY","YYY","XXZ","XYZ","YZZ","XZZ","YZZ","ZZZ"/)
 
+        !-- Compute on-the-fly RomberG's step
     a=F(totalFields)/F(totalFields-1)
 
         !-- General formulas for up to the fourth derivative
     if (o_derivative.eq.1) then !compute finite-field's first derivative
         do i=1,mF-1
             !write(*,*) i,P(mF+i),P(mF-i)
+            !write(*,*) P(mF+i)-P(mF-i)
             FF(i)=energyDerivative*(P(mF+i)-P(mF-i))/(2.0d0*F(mF+i))
         end do
     else if (o_derivative.eq.2) then !compute finite-field's second derivative
         do i=1,mF-1
             !write(*,*) i,P(mF+i),P(mF),P(mF-i)
+            !write(*,*) P(mF+i)-2.0d0*P(mF)+P(mF-i)
             FF(i)=energyDerivative*(P(mF+i)-2.0d0*P(mF)+P(mF-i))/F(mF+i)**2.0d0
         end do
     else if (o_derivative.eq.3) then !compute finite-field's third derivative
-        !do i=1,totalFields
-        !    write(*,*) P(i)
-        !end do
         do i=1,mF-1
             if (i.eq.mF-1) cycle
             !write(*,*) i,P(mF+i+1),P(mF+i),P(mF-i),P(mF-i-1)
             !write(*,*) P(mF+i+1)-a*P(mF+i)+a*P(mF-i)-P(mF-i-1),a*(a**2.0d0-1)*F(mF+i)**3.0d0
             FF(i)=3.0d0*energyDerivative*(P(mF+i+1)-a*P(mF+i)+a*P(mF-i)-P(mF-i-1))/(a*(a**2.0d0-1)*F(mF+i)**3.0d0)
         end do
-        !do i=1,mF-2
-        !    write(*,*) FF(i)
-        !end do
     else if (o_derivative.eq.4) then !compute finite-field's fourth derivative
         do i=1,mF-1
             if (i.eq.mF-2.or.i.eq.mF-1) cycle
@@ -203,11 +196,11 @@ Contains
         end do
     end if
 
-    write(*,*) "Field, properties and derivatives"
-    do i=1,totalFields
-        write(*,*) F(i),P(i),FF(i)
-    end do
-    write(*,*)
+    !write(*,*) "Field, properties and derivatives"
+    !do i=1,totalFields
+    !    write(*,*) F(i),P(i),FF(i)
+    !end do
+    !write(*,*)
 
         ! E    ! μ    ! α    ! β    ! γ
     if (inlop.eq.0) write(*,'(" RomberG - Computing the derivative of the Energy with respect to ",A1)') field_direction
@@ -234,7 +227,7 @@ Contains
     integer :: iterRR,length
     integer :: i,j
 
-    !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
+        !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
 
     if (derivative_order.le.2) length=mF-1
     if (derivative_order.eq.3) length=mF-2
@@ -330,7 +323,7 @@ Contains
 
     do k=1,3
             !-- Get the properties into a three-layer tensor for the respective derivative computation
-                       !call DeclareProperties(isEnergy,substr1,substr2,inlop,mF,totalFields,TensorP)
+        !call DeclareProperties(isEnergy,substr1,substr2,inlop,mF,totalFields,TensorP)
         call DeclareProperties(isEnergy,derivative_substr(k),derivative_substr(k+3),inlop,mF,totalFields,TensorP)
         if (printProperties.eqv..TRUE.) call PrintP(TensorP,components+1,totalFields,k)
 
