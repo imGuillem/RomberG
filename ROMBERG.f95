@@ -151,10 +151,16 @@ Contains
     integer, dimension(2,2) :: minloc_errRomberg
     integer :: i,j
 
-    !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
+        !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
 
     if(allocated(FF)) deallocate(FF)
-    allocate(FF(mF-1))
+    if (o_derivative.le.2) then
+        allocate(FF(mF-1))
+    else if (o_derivative.eq.3) then
+        allocate(FF(mF-2))
+    else if (o_derivative.eq.4) then
+        allocate(FF(mF-3))
+    end if
     if (inlop.eq.0) energyDerivative=-1.0d0 
 
         !-- String variables to parse into Romberg for printing
@@ -164,28 +170,44 @@ Contains
 
     a=F(totalFields)/F(totalFields-1)
 
-        !-- Change the formula for the general ones for a general step
+        !-- General formulas for up to the fourth derivative
     if (o_derivative.eq.1) then !compute finite-field's first derivative
         do i=1,mF-1
-            FF(i)=energyDerivative*(P(i)-P(mF+i))/(2.0d0*F(mF+I))
+            !write(*,*) i,P(mF+i),P(mF-i)
+            FF(i)=energyDerivative*(P(mF+i)-P(mF-i))/(2.0d0*F(mF+i))
         end do
     else if (o_derivative.eq.2) then !compute finite-field's second derivative
         do i=1,mF-1
-            FF(i)=energyDerivative*(P(i)-2.0d0*P(mF)+P(mF+i))/F(mF+i)**2.0d0
+            !write(*,*) i,P(mF+i),P(mF),P(mF-i)
+            FF(i)=energyDerivative*(P(mF+i)-2.0d0*P(mF)+P(mF-i))/F(mF+i)**2.0d0
         end do
     else if (o_derivative.eq.3) then !compute finite-field's third derivative
+        !do i=1,totalFields
+        !    write(*,*) P(i)
+        !end do
         do i=1,mF-1
-            FF(i)=3.0d0*energyDerivative*(P(i)-a*P(i)+a*P(mF+i)-P(mF+i+1))/(a*(a**2.0d0-1)*F(mF+i)**3)
+            if (i.eq.mF-1) cycle
+            !write(*,*) i,P(mF+i+1),P(mF+i),P(mF-i),P(mF-i-1)
+            !write(*,*) P(mF+i+1)-a*P(mF+i)+a*P(mF-i)-P(mF-i-1),a*(a**2.0d0-1)*F(mF+i)**3.0d0
+            FF(i)=3.0d0*energyDerivative*(P(mF+i+1)-a*P(mF+i)+a*P(mF-i)-P(mF-i-1))/(a*(a**2.0d0-1)*F(mF+i)**3.0d0)
         end do
+        !do i=1,mF-2
+        !    write(*,*) FF(i)
+        !end do
     else if (o_derivative.eq.4) then !compute finite-field's fourth derivative
         do i=1,mF-1
-            FF(i)=12.0d0*energyDerivative*(P(i+2)-(a**2.0d0)*P(i)+2.0d0*(a**2.0d0-1)*P(mF)-(a**2.0d0)*P(mF+i)+P(mF+i+2))/(a**2.0d0*(a**2.0d0-1)*F(mF+i)**4)
+            if (i.eq.mF-2.or.i.eq.mF-1) cycle
+            !write(*,*) i,P(mF+i+1)-(a**2.0d0)*P(mF+i)+(2.0d0*(a**2.0d0-1)*P(mF))-(a**2.0d0)*P(mF-i)+P(mF-i-1)
+            !write(*,*) P(mF+i+1),P(mF+i),P(mF),P(mF-i),P(mF-i-1)
+            FF(i)=12.0d0*energyDerivative*(P(mF+i+1)-(a**2.0d0)*P(mF+i)+(2.0d0*(a**2.0d0-1)*P(mF))-(a**2.0d0)*P(mF-i)+P(mF-i-1))/(a**2.0d0*(a**2.0d0-1)*F(mF+i)**4.0d0)
         end do
     end if
 
-    !do i=1,totalFields
-    !    write(*,*) F(i),P(i),FF(i)
-    !end do
+    write(*,*) "Field, properties and derivatives"
+    do i=1,totalFields
+        write(*,*) F(i),P(i),FF(i)
+    end do
+    write(*,*)
 
         ! E    ! μ    ! α    ! β    ! γ
     if (inlop.eq.0) write(*,'(" RomberG - Computing the derivative of the Energy with respect to ",A1)') field_direction
@@ -209,35 +231,35 @@ Contains
     double precision, allocatable, dimension(:,:) :: errRomberg
     integer, intent(out), dimension(2,2) :: err_minloc
     double precision :: abs_errRomberg1,abs_errRomberg2
-    integer :: iterRR
+    integer :: iterRR,length
     integer :: i,j
 
     !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
 
-    if (allocated(RombergT)) deallocate(RombergT)
-    allocate(RombergT(mF-1,mF-1))
-    if (allocated(errRombergT)) deallocate(errRombergT)
-    allocate(errRombergT(mF-2,mF-2))
-    if (allocated(errRomberg)) deallocate(errRomberg)
-    allocate(errRomberg(mF-2,mF-2))
+    if (derivative_order.le.2) length=mF-1
+    if (derivative_order.eq.3) length=mF-2
+    if (derivative_order.eq.4) length=mF-3
+    if (allocated(RombergT)) deallocate(RombergT); allocate(RombergT(length,length))
+    if (allocated(errRombergT)) deallocate(errRombergT); allocate(errRombergT(length-1,length-1))
+    if (allocated(errRomberg)) deallocate(errRomberg);  allocate(errRomberg(length-1,length-1))
 
         !-- Define Romberg matrix
-    RombergT(1:mF-1,1)=P
-    RombergT(1:mF-1,2:mF-1)=9.9d99
+    RombergT(1:length,1)=P
+    RombergT(1:length,2:length)=9.9d99
     errRomberg=9.9d99
 
         !-- Compute & print the Romberg triangle
-    do i=2,mF-1     !-- Compute from the second column, the first is the "zero-th" Romberg iteration
+    do i=2,length   !-- Compute from the second column, the first is the "zero-th" Romberg iteration
         iterRR=i-1  !-- Compute the Romberg iteration
-        do j=1,mF-i !-- Compute the Romberg for each row
+        do j=1,length-i+1 !-- Compute the Romberg for each row
             RombergT(j,i)=(a**(2*iterRR)*RombergT(j,i-1)-RombergT(j+1,i-1))/(a**(2*iterRR)-1.0d0)
         end do
     end do
     
     write(*,*) ("                            ROMBERG TRIANGLE",i=1,3)
-    write(*,*) "Iteration:",(j-1,"              ",j=1,mF-1)
-    do i=1,mF-1
-        do j=1,mF-1
+    write(*,*) "Iteration:",(j-1,"              ",j=1,length)
+    do i=1,length
+        do j=1,length
             if (RombergT(i,j).eq.9.9d99) then
                 write(*,'(A)',advance='NO') "   "
             else
@@ -252,8 +274,8 @@ Contains
         !       # the second-to-lowest (errRomberg2) error 
         !       # its respective value within 'errRomberg'
     write(*,*)
-    do i=1,mF-2
-        do j=1,mF-2
+    do i=1,length-1
+        do j=1,length-1
             if (RombergT(j,i).ge.9.9d99.or.Rombergt(j+1,i).ge.9.9d99) cycle
             errRomberg(j,i)=abs(RombergT(j,i)-RombergT(j+1,i))
         end do
@@ -262,8 +284,8 @@ Contains
 
     write(*,*) ("                        ROMBERG ERROR TRIANGLE",i=1,3)
     write(*,*) "Iteration:",(j-1,"              ",j=1,mF-1)
-    do i=1,mF-2
-        do j=1,mF-2
+    do i=1,length-1
+        do j=1,length-1
             if (errRombergT(i,j).eq.9.9d99) then
                 write(*,'(A)',advance='NO') "   "
             else
@@ -282,12 +304,12 @@ Contains
     deallocate(errRomberg)
 
     write(*,*)
-    write(*,'(" RomberG - Minimum value:",xF20.10,xx"and second best:",xF20.10)') RombergT(err_minloc(1,1),err_minloc(2,1)),RombergT(err_minloc(1,2),err_minloc(2,2))
-    write(*,'(" RomberG - Minimum absolute errors for the properties:",xF20.10,xx"and:",xF20.10)') abs_errRomberg1,abs_errRomberg2
+    write(*,'(" RomberG - Minimum value:",xF30.10,xx"and second best:",xF30.10)') RombergT(err_minloc(1,1),err_minloc(2,1)),RombergT(err_minloc(1,2),err_minloc(2,2))
+    write(*,'(" RomberG - Minimum absolute errors for the properties:",xF30.10,xx"and:",xF30.10)') abs_errRomberg1,abs_errRomberg2
     write(*,'(" RomberG - Romberg errors:",xF20.10,"% &&",xF20.10,"%")') &
     & 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
     write(*,*)
-
+    
     End subroutine RombergProcedure
 
     Subroutine Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
@@ -620,9 +642,22 @@ write(*,*)
     !-- (components+1) because the Romberg data is stored from the second column onwards
 errorType=2 !-- errorType.eq.2 uses RombergError, errorType.eq.1 uses AbsoluteError
 if (inlop.eq.3) then !-- Compute the derivatives of beta
-    write(*,*) "Needs to be implemented! Stop!"
-    stop
-    !-- Get best gamma
+    if (allocated(mainRombergBeta)) deallocate(mainRombergBeta)
+    if (allocated(secRombergBeta)) deallocate(secRombergBeta)
+    allocate(mainRombergBeta(10,3,3)); allocate(secRombergBeta(10,3,3))
+   !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    call Reps(isEnergy,printProperties,inlop,onlop,11,derivative_order,mF,totalFields,P_beta,secRombergBeta,mainRombergBeta)
+
+        !-- Get the best property tensor from the Romberg values and errors (errorType=2)
+    if (onlop.eq.4) then
+        BestGamma=0.0d0
+        write(*,*) "Still yet to be implemented - Stop"
+        stop
+    end if
+
+            !-- Transform the BestBeta matrix into the first hyperpolarizability tensor
+    call Gamma2Gamma(BestGamma,Gamma)
+
 else if (inlop.eq.2) then !-- Compute the derivatives of alpha
 
     if (allocated(mainRombergAlpha)) deallocate(mainRombergAlpha)
@@ -765,7 +800,6 @@ end if
     !-- Computing the longitudinal properties and other common values
 !dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel
 if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
-    write(*,*) doIsotropic
     if (onlop.eq.1) then
             !-- Get the longitudinal vector
         dipole_module=dsqrt(BestDipole(1)**2.0d0+BestDipole(2)**2.0d0+BestDipole(3)**2.0d0)
@@ -773,7 +807,7 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
         write(*,'(" RomberG - The modulus of the dipole moment is",xF10.6" a.u.")') dipole_module
 
     else if (onlop.eq.2) then
-            !-- Get the longitudinal polarizability: 10.1021/jp405144f
+            !-- Get the isotropic polarizability: 10.1021/jp405144f
         alpha_average=(BestAlpha(1)+BestAlpha(3)+BestAlpha(6))/3.0d0
         write(*,'(" RomberG - Elements of the polarizability matrix (αXX,αXY,αYY,αXZ,αYZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6)') &
         & BestAlpha(1),BestAlpha(2),BestAlpha(3),BestAlpha(4),BestAlpha(5)
@@ -789,11 +823,11 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
 
     else if (onlop.eq.4) then
             !-- Get the longitudinal second hyperpolarizability
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,1),BestGamma(2,1),BestGamma(3,1),BestGamma(4,1),BestGamma(5,1)
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,2),BestGamma(2,2),BestGamma(3,2),BestGamma(4,2),BestGamma(5,2)
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,3),BestGamma(2,3),BestGamma(3,3),BestGamma(4,3),BestGamma(5,3)
 
     end if
