@@ -7,10 +7,7 @@
 !   Code adapted from Pau Besalú-Sala (2020) to compute both high-order
 !   derivatives and isotropic non-linear optical properties from
 !   analytic electronic energies, dipole moments and polarizabilities.
-!   It is also generalized in order to consider non-power of two steps.
-!
-!   It also computes longitudinal and isotropic-based properties from
-!   the Romberg-obtained procedure. References for the formulae are given.
+!   It is also generalized in order to consider non-power of two steps
 ! 
 !       - Coded by Guillem Pey, 2025   
 !
@@ -375,13 +372,20 @@ Contains
     end do
     
         !-- Print the mainRomberG output values
+    write(*,*)
+    write(*,'(" RomberG - COMPUTED PROPERTIES FROM THE ROMBERG PROCEDURE")')
+    write(*,*)
     do k=1,3
         write(*,*)
-        if (inlop.eq.1) write(*,*) ("                         ",dipoleComponents(i),i=1,components-1) 
-        if (inlop.eq.2) write(*,*) ("                         ",alphaComponents(i),i=1,components-1) 
-        if (inlop.eq.3) write(*,*) ("                         ",betaComponents(i),i=1,components-1) 
-        write(*,*) derivative_substr(k+3),"             Value=",(mainRombergP(j,1,k),j=1,components-1)
-        write(*,*) derivative_substr(k+3),"    Absolute error=",(mainRombergP(j,2,k),j=1,components-1)
+        if (inlop.eq.1) write(*,'(" RomberG - Components of μ:",1X,A1,26X,A1,26X,A1)') dipoleComponents(1:components-1) 
+        if (inlop.eq.2) write(*,'(" RomberG - Components of α:",1X,A2,26X,A2,26X,A2,25X,A2,23X,A2,22X,A2)') alphaComponents(1:components-1) 
+        if (inlop.eq.3) write(*,'(" RomberG - Components of β:",1X,A3,16X,A3,17X,A3,18X,A3,19X,A3,16X,A3,17X,A3,18X,A3,19X,A3,19X,A3)') betaComponents(1:components-1)
+        if (inlop.ne.3) write(*,*) trim(derivative_substr(k+3))," -          Value=",(mainRombergP(j,1,k),j=1,components-1)
+        if (inlop.ne.3) write(*,*) trim(derivative_substr(k+3))," - Absolute error=",(mainRombergP(j,2,k),j=1,components-1)
+        if (inlop.eq.3) write(*,'(A1," -     Value=",1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10)') &
+        & derivative_substr(k+3),mainRombergP(1:components-1,1,k)
+        if (inlop.eq.3) write(*,'(A1," - Abs.Error=",1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10)') &
+        & derivative_substr(k+3),mainRombergP(1:components-1,2,k)
         !write(*,*) derivative_substr(k+3),"  RomberG error(%)=",(mainRombergP(j,3,k),j=1,components-1)
     end do
     if (printProperties.eqv..TRUE.) then
@@ -846,6 +850,12 @@ else if (inlop.eq.0) then !-- Compute the derivatives of the energy
     end if
 
 end if
+
+write(*,*)
+write(*,*) "######################################################"
+write(*,*) "######################################################"
+write(*,*) "######################################################"
+write(*,*)
 
     !-- Computing the longitudinal properties and other common values
 !dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel
