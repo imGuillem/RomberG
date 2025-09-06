@@ -380,12 +380,14 @@ Contains
         if (inlop.eq.1) write(*,'(" RomberG - Components of μ:",1X,A1,26X,A1,26X,A1)') dipoleComponents(1:components-1) 
         if (inlop.eq.2) write(*,'(" RomberG - Components of α:",1X,A2,26X,A2,26X,A2,25X,A2,23X,A2,22X,A2)') alphaComponents(1:components-1) 
         if (inlop.eq.3) write(*,'(" RomberG - Components of β:",1X,A3,16X,A3,17X,A3,18X,A3,19X,A3,16X,A3,17X,A3,18X,A3,19X,A3,19X,A3)') betaComponents(1:components-1)
-        if (inlop.ne.3) write(*,*) trim(derivative_substr(k+3))," -          Value=",(mainRombergP(j,1,k),j=1,components-1)
-        if (inlop.ne.3) write(*,*) trim(derivative_substr(k+3))," - Absolute error=",(mainRombergP(j,2,k),j=1,components-1)
-        if (inlop.eq.3) write(*,'(A1," -     Value=",1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10)') &
-        & derivative_substr(k+3),mainRombergP(1:components-1,1,k)
-        if (inlop.eq.3) write(*,'(A1," - Abs.Error=",1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10)') &
-        & derivative_substr(k+3),mainRombergP(1:components-1,2,k)
+
+        if (inlop.ne.3) write(*,*) "d",trim(derivative_substr(k+3)),"**",derivative_order," -    Value=",(mainRombergP(j,1,k),j=1,components-1)
+        if (inlop.ne.3) write(*,*) "d",trim(derivative_substr(k+3)),"**",derivative_order," - R. Error=",(mainRombergP(j,2,k),j=1,components-1)
+
+        if (inlop.eq.3) write(*,'("d",A1,"**",I1," -    Value=",1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10)') &
+        & derivative_substr(k+3),derivative_order,mainRombergP(1:components-1,1,k)
+        if (inlop.eq.3) write(*,'("d",A1,"**",I1," - R. Error=",1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10,1X,1pe20.10)') &
+        & derivative_substr(k+3),derivative_order,mainRombergP(1:components-1,2,k)
         !write(*,*) derivative_substr(k+3),"  RomberG error(%)=",(mainRombergP(j,3,k),j=1,components-1)
     end do
     if (printProperties.eqv..TRUE.) then
@@ -440,7 +442,7 @@ double precision :: BestProp
 double precision, dimension (3,3,3,3) :: Gamma
 double precision, dimension (3,3,3) :: Beta
 double precision, dimension (3,3) :: Alpha
-double precision :: dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel,gamma_average,deltaAlpha
+double precision :: dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel,gamma_average,deltaAlpha,beta_perpendicular
     !-- Dummy matrix to store the properties 
 double precision, dimension (5,2) :: P_general
 double precision :: field_strength
@@ -449,15 +451,16 @@ integer :: Xindex,Yindex,Zindex,indexBase,indexField
 integer :: stat1,ios,err,dummy,errorType
 integer :: i,j,k
 
-type(option_s) :: opts(7)
+type(option_s) :: opts(8)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
 opts(1) = option_s("input",.TRUE.,"i")
 opts(2) = option_s("output",.TRUE.,"o")
-opts(3) = option_s("longitudinal",.FALSE.,"l")
+opts(3) = option_s("longitudinal",.FALSE.,"L")
 opts(4) = option_s("isotropic",.FALSE.,"I")
 opts(5) = option_s("totalfields",.TRUE.,"F")
 opts(6) = option_s("printP",.FALSE.,"p")
 opts(7) = option_s("help",.FALSE.,"h")
+opts(8) = option_s("total",.FALSE.,"T")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
 dipoleComponents=(/"X  ","Y  ","Z  "/)
@@ -476,7 +479,8 @@ end if
 
     !-- Get command line arguments
 do
-    arg=getopt("i:o:F:lIph",opts)
+    arg=getopt("i:o:F:LITph",opts)
+        !-- Implementar "Simple"
     select case(arg)
         case(char(0))
             exit
@@ -535,10 +539,14 @@ do
             negativeFields=positiveFields
             mF=positiveFields+1
 
-        case("l","longitudinal")
+        case("L","longitudinal")
             doLongitudinal=.TRUE.
 
         case("I","isotropic")
+            doIsotropic=.TRUE.
+
+        case("T","total")
+            doLongitudinal=.TRUE.
             doIsotropic=.TRUE.
 
         case("p","printP")
@@ -552,6 +560,7 @@ do
             write(*,*) "    -F, --totalfields    :   Number of total fields probed. Integer required."
             write(*,*) "    -l, --longitudinal   :   Whether to compute longitudinal properties or not."
             write(*,*) "    -I, --isotropic      :   Whether to compute isotropic properties or not."
+            write(*,*) "    -S, --simple         :   Print the output matrices without losing precision"
             write(*,*) "    -p, --printP         :   Print the derivatives when computing the Romberg triangle for each component."
             write(*,*) "    -h, --help           :   Displays this message."
             write(*,*)
@@ -859,6 +868,7 @@ write(*,*)
 
     !-- Computing the longitudinal properties and other common values
 !dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel
+write(*,*) doLongitudinal,doIsotropic
 if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
     if (onlop.eq.1) then
             !-- Get the longitudinal vector
@@ -872,6 +882,11 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
         write(*,'(" RomberG - Elements of the polarizability matrix (αXX,αXY,αYY,αXZ,αYZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6)') &
         & BestAlpha(1),BestAlpha(2),BestAlpha(3),BestAlpha(4),BestAlpha(5)
         write(*,'(" RomberG - Elements of the polarizability matrix                 (αZZ) =",xF10.6,")")') BestAlpha(6)
+        write(*,*)
+        write(*,'(" RomberG - Polarizability matrix (αXX,αXY,αXZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Alpha(1,1),Alpha(1,2),Alpha(1,3)
+        write(*,'(" RomberG - Polarizability matrix (αYX,αYY,αYZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Alpha(2,1),Alpha(2,2),Alpha(2,3)
+        write(*,'(" RomberG - Polarizability matrix (αZX,αZY,αZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Alpha(3,1),Alpha(3,2),Alpha(3,3)
+        write(*,*)
         write(*,'(" RomberG - The average polarizability is ",x1pe22.15" a.u.")') alpha_average
 
     else if (onlop.eq.3) then
@@ -881,6 +896,21 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
         write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXYZ,βYYZ,βXZZ,βYZZ,βZZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
         & BestBeta(1,2),BestBeta(2,2),BestBeta(3,2),BestBeta(4,2),BestBeta(5,2)
 
+            !-- Print the whole 1st hyperpolarizability tensor
+        write(*,*)
+        write(*,'(" RomberG - X-layer of the hyperpolarizability tensor (βXXX,βXYX,βXZX):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(1,1,1),Beta(1,2,1),Beta(1,3,1)
+        write(*,'(" RomberG - X-layer of the hyperpolarizability tensor (βYXX,βYYX,βYZX):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(2,1,1),Beta(2,2,1),Beta(2,3,1)
+        write(*,'(" RomberG - X-layer of the hyperpolarizability tensor (βZXX,βZYX,βZZX):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(3,1,1),Beta(3,2,1),Beta(3,3,1)
+        write(*,*)
+        write(*,'(" RomberG - Y-layer of the hyperpolarizability tensor (βXXY,βXYY,βXZY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(1,1,2),Beta(1,2,2),Beta(1,3,2)
+        write(*,'(" RomberG - Y-layer of the hyperpolarizability tensor (βYXY,βYYY,βYZY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(2,1,2),Beta(2,2,2),Beta(2,3,2)
+        write(*,'(" RomberG - Y-layer of the hyperpolarizability tensor (βZXY,βZYY,βZZY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(3,1,2),Beta(3,2,2),Beta(3,3,2)
+        write(*,*)
+        write(*,'(" RomberG - Z-layer of the hyperpolarizability tensor (βXXZ,βXYZ,βXZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(1,1,3),Beta(1,2,3),Beta(1,3,3)
+        write(*,'(" RomberG - Z-layer of the hyperpolarizability tensor (βYXZ,βYYZ,βYZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(2,1,3),Beta(2,2,3),Beta(2,3,3)
+        write(*,'(" RomberG - Z-layer of the hyperpolarizability tensor (βZXZ,βZYZ,βZZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Beta(3,1,3),Beta(3,2,3),Beta(3,3,3)
+        write(*,*)
+
     else if (onlop.eq.4) then
             !-- Get the longitudinal second hyperpolarizability
         write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
@@ -889,6 +919,33 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
         & BestGamma(1,2),BestGamma(2,2),BestGamma(3,2),BestGamma(4,2),BestGamma(5,2)
         write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,3),BestGamma(2,3),BestGamma(3,3),BestGamma(4,3),BestGamma(5,3)
+
+            !-- Print the whole 2nd hyperpolarizability tensor
+        write(*,*)
+        write(*,'(" RomberG - XX-layer of the second hyperpolarizability tensor (γXXXX,γXYXX,γXZXX):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(1,1,1,1),Gamma(1,2,1,1),Gamma(1,3,1,1)
+        write(*,'(" RomberG - XX-layer of the second hyperpolarizability tensor (γYXXX,γYYXX,γYZXX):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(2,1,1,1),Gamma(2,2,1,1),Gamma(2,3,1,1)
+        write(*,'(" RomberG - XX-layer of the second hyperpolarizability tensor (γZXXX,γZYXX,γZZXX):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(3,1,1,1),Gamma(3,2,1,1),Gamma(3,3,1,1)
+        write(*,*)
+        write(*,'(" RomberG - XY-layer of the second hyperpolarizability tensor (γXXXY,γXYXY,γXZXY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(1,1,2,2),Gamma(1,2,2,2),Gamma(1,3,2,2)
+        write(*,'(" RomberG - XY-layer of the second hyperpolarizability tensor (γYXXY,γYYXY,γYZXY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(2,1,2,2),Gamma(2,2,2,2),Gamma(2,3,2,2)
+        write(*,'(" RomberG - XY-layer of the second hyperpolarizability tensor (γZXXY,γZYXY,γZZXY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(3,1,2,2),Gamma(3,2,2,2),Gamma(3,3,2,2)
+        write(*,*)
+        write(*,'(" RomberG - XZ-layer of the second hyperpolarizability tensor (γXXXZ,γXYXZ,γXZXZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(1,1,3,3),Gamma(1,2,3,3),Gamma(1,3,3,3)
+        write(*,'(" RomberG - XZ-layer of the second hyperpolarizability tensor (γYXXZ,γYYXZ,γYZXZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(2,1,3,3),Gamma(2,2,3,3),Gamma(2,3,3,3)
+        write(*,'(" RomberG - XZ-layer of the second hyperpolarizability tensor (γZXXZ,γZYXZ,γZZXZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(3,1,3,3),Gamma(3,2,3,3),Gamma(3,3,3,3)
+        write(*,*)
+        write(*,'(" RomberG - YY-layer of the second hyperpolarizability tensor (γXXYY,γXYYY,γXZYY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(1,1,1,1),Gamma(1,2,1,1),Gamma(1,3,1,1)
+        write(*,'(" RomberG - YY-layer of the second hyperpolarizability tensor (γYXYY,γYYYY,γYZYY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(2,1,1,1),Gamma(2,2,1,1),Gamma(2,3,1,1)
+        write(*,'(" RomberG - YY-layer of the second hyperpolarizability tensor (γZXYY,γZYYY,γZZYY):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(3,1,1,1),Gamma(3,2,1,1),Gamma(3,3,1,1)
+        write(*,*)
+        write(*,'(" RomberG - YZ-layer of the second hyperpolarizability tensor (γXXYZ,γXYYZ,γXZYZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(1,1,2,2),Gamma(1,2,2,2),Gamma(1,3,2,2)
+        write(*,'(" RomberG - YZ-layer of the second hyperpolarizability tensor (γYXYZ,γYYYZ,γYZYZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(2,1,2,2),Gamma(2,2,2,2),Gamma(2,3,2,2)
+        write(*,'(" RomberG - YZ-layer of the second hyperpolarizability tensor (γZXYZ,γZYYZ,γZZYZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(3,1,2,2),Gamma(3,2,2,2),Gamma(3,3,2,2)
+        write(*,*)
+        write(*,'(" RomberG - ZZ-layer of the second hyperpolarizability tensor (γXXZZ,γXYZZ,γXZZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(1,1,3,3),Gamma(1,2,3,3),Gamma(1,3,3,3)
+        write(*,'(" RomberG - ZZ-layer of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γYZZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(2,1,3,3),Gamma(2,2,3,3),Gamma(2,3,3,3)
+        write(*,'(" RomberG - ZZ-layer of the second hyperpolarizability tensor (γZXZZ,γZYZZ,γZZZZ):",4X,1pe22.15,4X,1pe22.15,4X,1pe22.15)') Gamma(3,1,3,3),Gamma(3,2,3,3),Gamma(3,3,3,3)
+        write(*,*)
 
     end if
 end if
@@ -900,7 +957,7 @@ if (doIsotropic.eqv..TRUE.) then
 
             !-- Compute deltaAlpha: 10.1007/s42452-025-07291-9
         if (inlop.eq.0) write(*,'(" RomberG - WARNING! Δα requires crossed terms. Do not trust the printed value.")')
-        deltaAlpha=dsqrt(Alpha(1,1)-Alpha(2,2)**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+12.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
+        deltaAlpha=dsqrt((Alpha(1,1)-Alpha(2,2))**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+12.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
         !deltaAlpha=dsqrt(Alpha(1,1)-Alpha(2,2)**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+24.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
         deltaAlpha=deltaAlpha*(dsqrt(2.0d0)/2.0d0)
         write(*,'(" RomberG - Δα = ",1pe22.15)') deltaAlpha
@@ -936,7 +993,18 @@ if (doIsotropic.eqv..TRUE.) then
             end do
         end do
         beta_parallel=3.0d0*beta_parallel/5.0d0/tmpDipModulus
-        write(*,'(" RomberG - Vectorial hyperpolarizability = ",1pe22.15)') beta_parallel
+        write(*,'(" RomberG - Parallel hyperpolarizability = ",1pe22.15)') beta_parallel
+
+            !-- Perpendicular hyperpolarizability: J. Chem. Phys. 152, 244106 (2020)
+        if (inlop.eq.0) write(*,'(" RomberG - WARNING! The perpendicular hyperpolarizability is lacking terms to compute. Do not fully trust the printed value")')
+        beta_perpendicular=0.0d0
+        do i=1,3
+            do j=1,3
+                beta_perpendicular=beta_perpendicular+(2.0d0*Beta(i,j,j)-3.0d0*Beta(j,i,j)+2.0d0*Beta(j,j,i))*tmpDipole(i)
+            end do
+        end do
+        beta_perpendicular=beta_perpendicular/5.0d0
+        write(*,'(" RomberG - Perpendicular hyperpolarizability = ",1pe22.15)') beta_perpendicular
 
             !-- "Beta4" from 10.1021/acs.jpca.5c00383; equivalent to parallel hyperpolarizability but without a factor
         beta_4=0.0d0
@@ -964,12 +1032,11 @@ if (doIsotropic.eqv..TRUE.) then
             !-- Compute the average second hyperpolarizability: 10.1007/s42452-025-07291-9
         if (inlop.eq.0.or.inlop.eq.1) write(*,'(" RomberG - WARNING! The average second hyperpolarizability is lacking terms to compute. Do not fully trust the printed value")')
         gamma_average=BestGamma(1,1)+BestGamma(5,1)+BestGamma(5,3)
-            !\gamma_xxyy+\gamma_xxzz+\gamma_yyzz
         do i=1,2
             do j=2,3
                 if (i.eq.j) cycle
                     !\gamma_average=gamma_average+2.0d0(\gamma_xxyy+\gamma_xxzz+\gamma_yyzz), but iijj==ijij=ijji=jjii=... -> \gamma_average=\gamma_average+2.0d0*((6.0d0/2.0d0)*\gamma_xxyy+...)
-                gamma_average=gamma_average+6.0d0*Gamma(i,i,j,j)
+                gamma_average=gamma_average+6.0d0*Gamma(i,i,j,j) !\gamma_xxyy+\gamma_xxzz+\gamma_yyzz
             end do
         end do
         write(*,'(" RomberG - Average second hyperpolarizability  = ",1pe22.15)') gamma_average
