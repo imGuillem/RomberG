@@ -404,6 +404,31 @@ Contains
     write(*,*)
 
     End subroutine
+    
+    Subroutine complex2simple(TensRomP)
+    implicit none
+    double precision, intent(inout), allocatable, dimension(:,:,:) :: TensRomP
+    double precision :: threshold,marking
+    integer :: i,j,rows,columns
+
+    columns=3
+    rows=size(TensRomP)/columns/3
+    threshold=1.0d1
+
+    do i=1,columns
+        do j=1,rows
+            marking=1.0d2*abs(TensRomP(j,1,i)/TensRomp(j,2,i))
+            if (marking.lt.threshold) then
+                write(*,'(" RomberG - WARNING! The output tensor components (",xI1,",",xI1,") have significant errors.")') j,i
+            else if (marking.gt.threshold.and.abs(TensRomP(j,1,i)).le.1.0e-6) then
+                write(*,'(" RomberG - WARNING! The output tensor component (",xI1,",",xI1,") is simplified to zero. ")') j,i
+                write(*,'(" RomberG - To avoid this, execute again RomberG without the -S flag")')
+                TensRomP(j,1,i)=0.0d0
+            end if
+        end do
+    end do
+    End subroutine complex2simple
+
 
 End module GrebmoR
 !###################################################################################################
@@ -422,6 +447,7 @@ character*100 :: basename,mol_name
 logical :: doLongitudinal = .FALSE.
 logical :: doIsotropic = .FALSE.
 logical :: doSQRTstep = .FALSE.
+logical :: simpleOutput = .FALSE.
 logical :: printProperties = .FALSE.
 logical :: isEnergy,isDipole,isAlpha,isBeta,isGamma
     !-- Tensors in which the properties are gathered
@@ -451,7 +477,7 @@ integer :: Xindex,Yindex,Zindex,indexBase,indexField
 integer :: stat1,ios,err,dummy,errorType
 integer :: i,j,k
 
-type(option_s) :: opts(8)
+type(option_s) :: opts(9)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
 opts(1) = option_s("input",.TRUE.,"i")
 opts(2) = option_s("output",.TRUE.,"o")
@@ -461,6 +487,7 @@ opts(5) = option_s("totalfields",.TRUE.,"F")
 opts(6) = option_s("printP",.FALSE.,"p")
 opts(7) = option_s("help",.FALSE.,"h")
 opts(8) = option_s("total",.FALSE.,"T")
+opts(9) = option_s("simple",.FALSE.,"S")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
 dipoleComponents=(/"X  ","Y  ","Z  "/)
@@ -479,7 +506,7 @@ end if
 
     !-- Get command line arguments
 do
-    arg=getopt("i:o:F:LITph",opts)
+    arg=getopt("i:o:F:SLITph",opts)
         !-- Implementar "Simple"
     select case(arg)
         case(char(0))
@@ -538,6 +565,9 @@ do
             positiveFields=(totalFields-1)/2
             negativeFields=positiveFields
             mF=positiveFields+1
+
+        case("S","simple")
+            simpleOutput=.TRUE.
 
         case("L","longitudinal")
             doLongitudinal=.TRUE.
@@ -689,6 +719,8 @@ if (inlop.eq.3) then !-- Compute the derivatives of beta
    !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
     call Reps(isEnergy,printProperties,inlop,onlop,11,derivative_order,mF,totalFields,P_beta,secRombergBeta,mainRombergBeta)
 
+    if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergBeta)
+
         !-- Get the best property tensor from the Romberg values and errors (errorType=1)
     if (onlop.eq.4) then
         BestGamma=0.0d0
@@ -728,6 +760,8 @@ else if (inlop.eq.2) then !-- Compute the derivatives of alpha
     allocate(mainRombergAlpha(6,3,3)); allocate(secRombergAlpha(6,3,3))
    !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
     call Reps(isEnergy,printProperties,inlop,onlop,7,derivative_order,mF,totalFields,P_alpha,secRombergAlpha,mainRombergAlpha)
+
+    if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergAlpha)
 
         !-- Get the best property tensor from the Romberg values and errors (errorType=2)
     if (onlop.eq.3) then
@@ -770,6 +804,8 @@ else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
     allocate (mainRombergDipole(3,3,3)); allocate(secRombergDipole(3,3,3))
    !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
     call Reps(isEnergy,printProperties,inlop,onlop,4,derivative_order,mF,totalFields,P_dipole,secRombergDipole,mainRombergDipole)
+
+    if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergDipole)
 
         !-- Get the best property tensor from the Romberg values and errors (errorType=2)
     if (onlop.eq.2) then
@@ -823,6 +859,8 @@ else if (inlop.eq.0) then !-- Compute the derivatives of the energy
    !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
     call Reps(isEnergy,printProperties,inlop,onlop,2,derivative_order,mF,totalFields,P_energy,secRombergEnergy,mainRombergEnergy)
 
+    if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergEnergy)
+
         !-- Get the best property tensor from the Romberg values and errors (errorType=2)
     if (onlop.eq.1) then ! \mu_x/y/z
         BestDipole(1)=mainRombergEnergy(1,1,1)
@@ -868,7 +906,6 @@ write(*,*)
 
     !-- Computing the longitudinal properties and other common values
 !dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,beta_parallel,gamma_parallel
-write(*,*) doLongitudinal,doIsotropic
 if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
     if (onlop.eq.1) then
             !-- Get the longitudinal vector
@@ -1046,7 +1083,6 @@ end if
     !-- Closing units and removing .nlop files, they are still stored on the molecule directory
 close(unit=4)
 close(unit=44)
-call system("rm *.nlop")
 write(*,*)
 write(*,*) "RomberG - Romberg procedure done!"
 write(*,*)
