@@ -427,6 +427,7 @@ Contains
             end if
         end do
     end do
+
     End subroutine complex2simple
 
 
@@ -588,9 +589,11 @@ do
             write(*,*) "    -i, --input          :   Input property - Energy/energy/E ; Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B"
             write(*,*) "    -o, --output         :   Output property - Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B ; Gamma/gamma/G"
             write(*,*) "    -F, --totalfields    :   Number of total fields probed. Integer required."
-            write(*,*) "    -l, --longitudinal   :   Whether to compute longitudinal properties or not."
+            write(*,*) "    -L, --longitudinal   :   Whether to compute longitudinal properties or not."
             write(*,*) "    -I, --isotropic      :   Whether to compute isotropic properties or not."
-            write(*,*) "    -S, --simple         :   Print the output matrices without losing precision"
+            write(*,*) "    -T, --total          :   Combines the output of the -L and -I flags"
+            write(*,*) "    -S, --simple         :   Simplfiies the output to print properties under 1E-6 with Romberg errors lower than 10%"
+            write(*,*) "                             than its value, i.e. errors than 1E-7"
             write(*,*) "    -p, --printP         :   Print the derivatives when computing the Romberg triangle for each component."
             write(*,*) "    -h, --help           :   Displays this message."
             write(*,*)
