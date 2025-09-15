@@ -261,9 +261,12 @@ Contains
         end do
     end if
 
-    write(*,'(" RomberG - WARNING! Ignore the last ",I1," derivatives")') mF
     do i=1,totalFields
-        write(*,'(" RomberG - Field (10^-4)= ",F6.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
+        if (i.le.mF-1) then
+            write(*,'(" RomberG - Field (10^-4)= ",F6.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
+        else
+            write(*,'(" RomberG - Field (10^-4)= ",F6.2,"    P(F) = ",1pe22.15)') F(i)*1.0d4,P(i)
+        end if 
     end do
     write(*,*)
 
@@ -692,7 +695,16 @@ if (isSlash.eqv..TRUE.) mol_name=trim(mol_name(1:index(mol_name,"/")-1))
 if (inlop.eq.0) then
     isEnergy=.TRUE.
     call system("rm isEnergy.nlop")
-    call system("cd $(pwd)/"//mol_name//" ; grep -m 1 -A 0 'Total Energy' *.fchk > isEnergy.nlop; sed -i 's/Total Energy                               R/T/g' isEnergy.nlop; cp isEnergy.nlop ../")
+    call system("which grep > 1041.txt")
+    open (unit=1041,file="1041.txt",status="old")
+    read (1041,'(A)') line
+    if (index(line,"usr").eq.0) then
+        call system("cd $(pwd)/"//mol_name//" ; grep -m 1 -A 0 'Total Energy' *.fchk | awk '{print; print ""--""}' > isEnergy.nlop; sed -i 's/Total Energy                               R/T/g' isEnergy.nlop; cp isEnergy.nlop ../")
+    else
+        call system("cd $(pwd)/"//mol_name//" ; grep -m 1 -A 0 'Total Energy' *.fchk | > isEnergy.nlop; sed -i 's/Total Energy                               R/T/g' isEnergy.nlop; cp isEnergy.nlop ../")
+    end if
+    close(1041)
+    call system("rm 1041.txt")
     open (unit=4,file="isEnergy.nlop",status="old")
 else if (inlop.eq.1) then
     isEnergy=.FALSE.
