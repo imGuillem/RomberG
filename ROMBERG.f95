@@ -71,11 +71,6 @@ Contains
         !-- Gets the direction and strength of the field.
         !-- It also gets the substring where there is only the properties 
 
-
-        !-- Check whether the molecule has an x/y/z in its name and redefine the name and reading line 
-    if (index(molname,"x").ne.0.or.index(molname,"y").ne.0.or.index(molname,"z").ne.0) then
-        line=line(index(line,trim(molname))+len_trim(molname):)
-    end if
         !-- Get the direction of the applied field, intent(out)
     Findex=index(line,substr1)
     Findex=Findex+index(line,substr2)
@@ -515,10 +510,11 @@ use f90getopt   !-- Argument parser: https://github.com/haniibrahim/f90getopt
 use GrebmoR     !-- Necessary module to I/O allocatable arrays in RomberG
 implicit none
 character*1 :: arg,field_direction
+character :: substring1*2,substring2*3
 character*1,dimension(6) :: derivative_substr
 character :: dipoleComponents(3)*1, alphaComponents(6)*2,betaComponents(10)*3
 character*200 :: line,postLine
-character*100 :: mol_name
+character*100 :: mol_name,filename
 logical :: doLongitudinal = .FALSE.
 logical :: doIsotropic = .FALSE.
 logical :: doSQRTstep = .FALSE.
@@ -551,7 +547,7 @@ double precision, dimension (5,2) :: P_general
 double precision :: field_strength,kk
 integer :: indexEnergy,indexDipole,indexAlpha,indexBeta,indexGamma
 integer :: Xindex,Yindex,Zindex,indexBase,indexField
-integer :: stat1,ios,err,dummy,errorType
+integer :: stat1,ios,err,dummy,prefixPosition,errorType
 integer :: i,j,k
 
 type(option_s) :: opts(9)
@@ -729,8 +725,36 @@ end if
 if (inlop.ge.2) read(4,*,iostat=ios) line,P_general(1,2),P_general(2,2),P_general(3,2),P_general(4,2),P_general(5,2)
 if (inlop.eq.3) read(4,*,iostat=ios) line
 
+    !-- Manipulate the "line" string to know what is the shape of the file: 'random' name, the molname, 'sp_molname' or 'spmolname'
+substring1=line(1:2)
+substring2=line(1:3)
+indexField=index(line,"0.fchk")
+if (index(substring1,"sp").ne.0) then
+        !-- The molecule, or filename, begins with the string sp
+    prefixPosition=2
+end if
+if (index(substring2,"sp_").ne.0) then
+        !-- The molecule does not begin with the 'sp' string
+    prefixPosition=3
+end if
+if (index(substring2,"sp_").eq.0.and.index(substring1,"sp").eq.0) then
+    prefixPosition=4
+end if
+
+    !-- Get the filename from the *.nlop input file
+filename=line(prefixPosition+1:indexField-1)
+if (filename.eq.mol_name) then
+        !-- Remove 'mol_name' from the isP.nlop files
+    if (prefixPosition.eq.2) then
+        call system("sed -i 's/sp"//trim(mol_name)// "/ /g' *.nlop")
+    else if (prefixPosition.eq.3) then
+        call system("sed -i 's/sp_"//trim(mol_name)// "/ /g' *.nlop")
+    else
+        !-- The name does not have any prefix
+    end if
+end if
+
     !-- Declare the zero-field properties according to Gaussian's .fchk format
-        !-- He d'intentar millorar aquesta part del codi
 dummy=1
 if (inlop.eq.3) then
         !-- Beta is changed to negative later 
@@ -1024,9 +1048,9 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
 
     else if (onlop.eq.3) then
             !-- Get the longitudinal first hyperpolarizability
-        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXXX,βXXY,βXYY,βYYY,βXXZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXXX,βXXY,βXYY,βYYY,βXXZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
         & BestBeta(1,1),BestBeta(2,1),BestBeta(3,1),BestBeta(4,1),BestBeta(5,1)
-        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXYZ,βYYZ,βXZZ,βYZZ,βZZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
+        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXYZ,βYYZ,βXZZ,βYZZ,βZZZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
         & BestBeta(1,2),BestBeta(2,2),BestBeta(3,2),BestBeta(4,2),BestBeta(5,2)
         call maxError(inlop,printProperties,mainRombergEnergy,mainRombergDipole,mainRombergAlpha,mainRombergBeta,secRombergEnergy,secRombergDipole,secRombergAlpha,secRombergBeta)
 
@@ -1049,11 +1073,11 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
 
     else if (onlop.eq.4) then
             !-- Get the longitudinal second hyperpolarizability
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
         & BestGamma(1,1),BestGamma(2,1),BestGamma(3,1),BestGamma(4,1),BestGamma(5,1)
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
         & BestGamma(1,2),BestGamma(2,2),BestGamma(3,2),BestGamma(4,2),BestGamma(5,2)
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
         & BestGamma(1,3),BestGamma(2,3),BestGamma(3,3),BestGamma(4,3),BestGamma(5,3)
         call maxError(inlop,printProperties,mainRombergEnergy,mainRombergDipole,mainRombergAlpha,mainRombergBeta,secRombergEnergy,secRombergDipole,secRombergAlpha,secRombergBeta)
 
