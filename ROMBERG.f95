@@ -258,9 +258,9 @@ Contains
 
     do i=1,totalFields
         if (i.le.mF-1) then
-            write(*,'(" RomberG - Field (10^-4)= ",F6.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
+            write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
         else
-            write(*,'(" RomberG - Field (10^-4)= ",F6.2,"    P(F) = ",1pe22.15)') F(i)*1.0d4,P(i)
+            write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15)') F(i)*1.0d4,P(i)
         end if 
     end do
     write(*,*)
@@ -521,11 +521,13 @@ logical :: doSQRTstep = .FALSE.
 logical :: simpleOutput = .FALSE.
 logical :: printProperties = .FALSE.
 logical :: isSlash = .FALSE.
+logical :: pauRomberg = .FALSE.
 logical :: isEnergy,isDipole,isAlpha,isBeta,isGamma
     !-- Tensors in which the properties are gathered
 double precision, allocatable, dimension (:,:,:) :: P_energy,P_dipole,P_alpha,P_beta
     !-- Output tensors for each property
 double precision, dimension(3) :: mainP,secP
+double precision, allocatable, dimension (:,:) :: simpleRomberg,neg_helpAllocat,pos_helpAllocat
 double precision, allocatable, dimension (:,:,:) :: mainRombergEnergy,secRombergEnergy
 double precision, allocatable, dimension (:,:,:) :: mainRombergDipole,secRombergDipole
 double precision, allocatable, dimension (:,:,:) :: mainRombergAlpha,secRombergAlpha
@@ -544,13 +546,14 @@ double precision :: dipole_module,tmpDipModulus,alpha_average,beta_vec,beta_4,be
 double precision :: exDipoleMoment,exIsoAlpha
     !-- Dummy matrix to store the properties 
 double precision, dimension (5,2) :: P_general
-double precision :: field_strength,kk
+double precision, dimension(3) :: sec_simpleOutput,main_simpleOutput
+double precision :: field_strength,kk,step,testVal
 integer :: indexEnergy,indexDipole,indexAlpha,indexBeta,indexGamma
 integer :: Xindex,Yindex,Zindex,indexBase,indexField
 integer :: stat1,ios,err,dummy,prefixPosition,errorType
 integer :: i,j,k
 
-type(option_s) :: opts(9)
+type(option_s) :: opts(10)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
 opts(1) = option_s("input",.TRUE.,"i")
 opts(2) = option_s("output",.TRUE.,"o")
@@ -561,6 +564,7 @@ opts(6) = option_s("printP",.FALSE.,"p")
 opts(7) = option_s("help",.FALSE.,"h")
 opts(8) = option_s("total",.FALSE.,"T")
 opts(9) = option_s("simple",.FALSE.,"S")
+opts(10) = option_s("sqrt",.FALSE.,"Y")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
 dipoleComponents=(/"X  ","Y  ","Z  "/)
@@ -579,7 +583,7 @@ end if
 
     !-- Get command line arguments
 do
-    arg=getopt("i:o:F:SLITph",opts)
+    arg=getopt("i:o:F:SLITYph",opts)
         !-- Implementar "Simple"
     select case(arg)
         case(char(0))
@@ -652,6 +656,9 @@ do
             doLongitudinal=.TRUE.
             doIsotropic=.TRUE.
 
+        case("Y","sqrt")
+            doSQRTstep=.TRUE. 
+
         case("p","printP")
             printProperties=.TRUE.
 
@@ -684,8 +691,66 @@ end if
 
     !-- Get the name of the molecule from the command execution line
 call get_command_argument(command_argument_count(),value=mol_name,status=stat1)
+if (index(mol_name,".tmp").ne.0) pauRomberg=.TRUE.
 if (index(mol_name,"/").ne.0) isSlash=.TRUE.
 if (isSlash.eqv..TRUE.) mol_name=trim(mol_name(1:index(mol_name,"/")-1))
+
+    !-- Call "Pau's version" of Romberg to only compute a single property - Call Finite-Field and Romberg
+if (pauRomberg.eqv..TRUE.) then
+
+        !-- Open unit specific for this version
+    open(unit=0918,file=mol_name,status="old")
+    allocate(simpleRomberg(totalFields,2))
+    allocate(neg_helpAllocat(negativeFields,2))
+    allocate(pos_helpAllocat(negativeFields,2))
+        
+        !-- Get the individual property of interest + error handling
+    i=0
+    do
+        read(0918,*,end=0959) testVal
+        i=i+1
+        simpleRomberg(i,2) = testVal
+    end do
+    0959 continue
+    if (i.ne.totalFields) then
+        write(*,'(" RomberG - Number of input fields not matching the amount of input data. Stop.")') 
+        stop
+    end if
+    step=2.0d0
+    if (doSQRTstep.eqv..TRUE.) step=sqrt(2.0d0)
+    simpleRomberg(1,1)=0.0d0
+
+        !-- Allocate the field values for Romberg - It is considered the first field as 1.0d-4
+    do i=1,positiveFields
+        simpleRomberg(i+1,1)=1.0d0*step**(i-1)*1.0d-4
+    end do
+    do i=1,negativeFields
+        simpleRomberg(i+1+negativeFields,1)=-1.0d0*step**(i-1)*1.0d-4
+        neg_helpAllocat(i,1)=-1.0d0*step**(i-1)*1.0d-4
+        pos_helpAllocat(i,1)=1.0d0*step**(i-1)*1.0d-4
+        neg_helpAllocat(i,2)=simpleRomberg(mF+i,2)
+        pos_helpAllocat(i,2)=simpleRomberg(i+1,2)
+    end do
+
+        !-- Redefining the order of simpleRomberg to call Finite-Field: first negative fields, 0-field, positive fields
+    neg_helpAllocat=neg_helpAllocat(size(neg_helpAllocat,1):1:-1,:) !-- Reordering the negative fields from lowest to highest
+    simpleRomberg(mF,:)=simpleRomberg(1,:)
+    do i=1,negativeFields
+        simpleRomberg(i,:)=neg_helpAllocat(i,:)
+    end do
+    do i=1,positiveFields
+        simpleRomberg(mF+i,:)=pos_helpAllocat(i,:)
+    end do
+    write(*,*)
+
+        !-- Calling Finite-Field and Romberg Procedure
+   !call ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,mF,totalFields,F,P,secRombergP,mainRombergP)
+    call ComputeDerivatives(1,1,inlop,onlop,"Z",derivative_order,mF,totalFields,simpleRomberg(:,1),simpleRomberg(:,2),sec_simpleOutput,main_simpleOutput)    
+
+        !-- Redirect to the end of RomberG
+    goto 0920
+end if
+
 
     !-- Get the field-dependent properties from the .fchk files
 if (inlop.eq.0) then
@@ -764,10 +829,6 @@ if (inlop.eq.3) then
             dummy=dummy+1
             P_beta(mF,dummy,1:3)=P_general(i,j)
     end do; end do
-    !do i=1,3
-    !    write(*,*) (P_beta(mF,j,i),j=1,dummy)
-    !end do 
-    !stop
 else if (inlop.eq.2) then
     allocate(P_alpha(totalFields,7,3))
     P_alpha(mF,1,1:3)=0.0d0
@@ -1048,9 +1109,9 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
 
     else if (onlop.eq.3) then
             !-- Get the longitudinal first hyperpolarizability
-        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXXX,βXXY,βXYY,βYYY,βXXZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
+        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXXX,βXXY,βXYY,βYYY,βXXZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
         & BestBeta(1,1),BestBeta(2,1),BestBeta(3,1),BestBeta(4,1),BestBeta(5,1)
-        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXYZ,βYYZ,βXZZ,βYZZ,βZZZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
+        write(*,'(" RomberG - Elements of the hyperpolarizability tensor (βXYZ,βYYZ,βXZZ,βYZZ,βZZZ) = ("xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,",",xF10.6,")")') &
         & BestBeta(1,2),BestBeta(2,2),BestBeta(3,2),BestBeta(4,2),BestBeta(5,2)
         call maxError(inlop,printProperties,mainRombergEnergy,mainRombergDipole,mainRombergAlpha,mainRombergBeta,secRombergEnergy,secRombergDipole,secRombergAlpha,secRombergBeta)
 
@@ -1073,11 +1134,11 @@ if (doLongitudinal.eqv..TRUE..or.doIsotropic.eqv..TRUE.) then
 
     else if (onlop.eq.4) then
             !-- Get the longitudinal second hyperpolarizability
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXXX,γXXYX,γXXYY,γYXYY,γYYYY) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,1),BestGamma(2,1),BestGamma(3,1),BestGamma(4,1),BestGamma(5,1)
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γXXZX,γXXZY,γYXZY,γYYZY,γXXZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,2),BestGamma(2,2),BestGamma(3,2),BestGamma(4,2),BestGamma(5,2)
-        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,",",x1pe22.15,")")') &
+        write(*,'(" RomberG - Elements of the second hyperpolarizability tensor (γYXZZ,γYYZZ,γZXZZ,γZYZZ,γZZZZ) = ("xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,",",xF15.6,")")') &
         & BestGamma(1,3),BestGamma(2,3),BestGamma(3,3),BestGamma(4,3),BestGamma(5,3)
         call maxError(inlop,printProperties,mainRombergEnergy,mainRombergDipole,mainRombergAlpha,mainRombergBeta,secRombergEnergy,secRombergDipole,secRombergAlpha,secRombergBeta)
 
@@ -1218,6 +1279,8 @@ end if
 close(unit=4)
 close(unit=44)
 close(unit=1101)
+0920 continue
+close(unit=0918)
 write(*,*)
 write(*,*) "RomberG - Romberg procedure done!"
 write(*,*)
