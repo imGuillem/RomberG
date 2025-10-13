@@ -522,6 +522,7 @@ logical :: simpleOutput = .FALSE.
 logical :: printProperties = .FALSE.
 logical :: isSlash = .FALSE.
 logical :: pauRomberg = .FALSE.
+logical :: initField = .FALSE.
 logical :: isEnergy,isDipole,isAlpha,isBeta,isGamma
     !-- Tensors in which the properties are gathered
 double precision, allocatable, dimension (:,:,:) :: P_energy,P_dipole,P_alpha,P_beta
@@ -547,13 +548,13 @@ double precision :: exDipoleMoment,exIsoAlpha
     !-- Dummy matrix to store the properties 
 double precision, dimension (5,2) :: P_general
 double precision, dimension(3) :: sec_simpleOutput,main_simpleOutput
-double precision :: field_strength,kk,step,testVal
+double precision :: field_strength,kk,step,testVal,initialField
 integer :: indexEnergy,indexDipole,indexAlpha,indexBeta,indexGamma
 integer :: Xindex,Yindex,Zindex,indexBase,indexField
 integer :: stat1,ios,err,dummy,prefixPosition,errorType
 integer :: i,j,k
 
-type(option_s) :: opts(10)
+type(option_s) :: opts(11)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
 opts(1) = option_s("input",.TRUE.,"i")
 opts(2) = option_s("output",.TRUE.,"o")
@@ -565,6 +566,7 @@ opts(7) = option_s("help",.FALSE.,"h")
 opts(8) = option_s("total",.FALSE.,"T")
 opts(9) = option_s("simple",.FALSE.,"S")
 opts(10) = option_s("sqrt",.FALSE.,"Y")
+opts(11) = option_s("init",.TRUE.,"Q")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
 dipoleComponents=(/"X  ","Y  ","Z  "/)
@@ -583,7 +585,7 @@ end if
 
     !-- Get command line arguments
 do
-    arg=getopt("i:o:F:SLITYph",opts)
+    arg=getopt("i:o:F:Q:SLITYph",opts)
         !-- Implementar "Simple"
     select case(arg)
         case(char(0))
@@ -643,6 +645,10 @@ do
             negativeFields=positiveFields
             mF=positiveFields+1
 
+        case("Q","init")
+            initField=.TRUE.
+            read(optarg,*) initialField
+
         case("S","simple")
             simpleOutput=.TRUE.
 
@@ -691,12 +697,15 @@ end if
 
     !-- Get the name of the molecule from the command execution line
 call get_command_argument(command_argument_count(),value=mol_name,status=stat1)
-if (index(mol_name,".tmp").ne.0) pauRomberg=.TRUE.
+if (index(mol_name,".").ne.0) pauRomberg=.TRUE.
 if (index(mol_name,"/").ne.0) isSlash=.TRUE.
 if (isSlash.eqv..TRUE.) mol_name=trim(mol_name(1:index(mol_name,"/")-1))
 
     !-- Call "Pau's version" of Romberg to only compute a single property - Call Finite-Field and Romberg
 if (pauRomberg.eqv..TRUE.) then
+    
+        !-- Declare a different initial field than 1.0d-4 or 2.0d-4
+    if(initField.eqv..FALSE.) initialField=1.0d0    
 
         !-- Open unit specific for this version
     open(unit=0918,file=mol_name,status="old")
@@ -722,12 +731,12 @@ if (pauRomberg.eqv..TRUE.) then
 
         !-- Allocate the field values for Romberg - It is considered the first field as 1.0d-4
     do i=1,positiveFields
-        simpleRomberg(i+1,1)=1.0d0*step**(i-1)*1.0d-4
+        simpleRomberg(i+1,1)=initialField*step**(i-1)*1.0d-4
     end do
     do i=1,negativeFields
         simpleRomberg(i+1+negativeFields,1)=-1.0d0*step**(i-1)*1.0d-4
-        neg_helpAllocat(i,1)=-1.0d0*step**(i-1)*1.0d-4
-        pos_helpAllocat(i,1)=1.0d0*step**(i-1)*1.0d-4
+        neg_helpAllocat(i,1)=-initialField*step**(i-1)*1.0d-4
+        pos_helpAllocat(i,1)=initialField*step**(i-1)*1.0d-4
         neg_helpAllocat(i,2)=simpleRomberg(mF+i,2)
         pos_helpAllocat(i,2)=simpleRomberg(i+1,2)
     end do
