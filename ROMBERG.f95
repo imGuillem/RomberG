@@ -221,10 +221,8 @@ Contains
     if(allocated(FF)) deallocate(FF)
     if (o_derivative.le.2) then
         allocate(FF(mF-1))
-    else if (o_derivative.eq.3) then
+    else if (o_derivative.eq.3.or.o_derivative.eq.4) then
         allocate(FF(mF-2))
-    else if (o_derivative.eq.4) then
-        allocate(FF(mF-3))
     end if
     if (inlop.eq.0) energyDerivative=-1.0d0 
 
@@ -251,18 +249,28 @@ Contains
         end do
     else if (o_derivative.eq.4) then !compute finite-field's fourth derivative
         do i=1,mF-1
-            if (i.eq.mF-2.or.i.eq.mF-1) cycle
+            if (i.eq.mF-1) cycle
             FF(i)=12.0d0*energyDerivative*(P(mF+i+1)-(a**2.0d0)*P(mF+i)+(2.0d0*(a**2.0d0-1)*P(mF))-(a**2.0d0)*P(mF-i)+P(mF-i-1))/(a**2.0d0*(a**2.0d0-1)*F(mF+i)**4.0d0)
         end do
     end if
 
-    do i=1,totalFields
-        if (i.le.mF-1) then
-            write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
-        else
-            write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15)') F(i)*1.0d4,P(i)
-        end if 
-    end do
+    if (o_derivative.le.2) then
+        do i=1,totalFields
+            if (i.le.mF-1) then
+                write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
+            else
+                write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15)') F(i)*1.0d4,P(i)
+            end if 
+        end do
+    else
+        do i=1,totalFields
+            if (i.le.mF-2) then
+                write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15,"    d**",I1," P(F) = ",1pe22.15)') F(i)*1.0d4,P(i),derivative_order,FF(i)
+            else
+                write(*,'(" RomberG - Field (10^-4)= ",F9.2,"    P(F) = ",1pe22.15)') F(i)*1.0d4,P(i)
+            end if 
+        end do 
+    end if
     write(*,*)
 
         ! E    ! μ    ! α    ! β    ! γ
@@ -293,8 +301,7 @@ Contains
     !-- Reference: M. Medved et al. / Journal of Molecular Structure: THEOCHEM 847 (2007) 39–46
 
     if (derivative_order.le.2) length=mF-1
-    if (derivative_order.eq.3) length=mF-2
-    if (derivative_order.eq.4) length=mF-3
+    if (derivative_order.eq.3.or.derivative_order.eq.4) length=mF-2
     if (allocated(RombergT)) deallocate(RombergT); allocate(RombergT(length,length))
     if (allocated(errRombergT)) deallocate(errRombergT); allocate(errRombergT(length-1,length-1))
     if (allocated(errRomberg)) deallocate(errRomberg);  allocate(errRomberg(length-1,length-1))
@@ -365,6 +372,8 @@ Contains
     write(*,*)
     write(*,'(" RomberG - Best value:",x1pe22.15,xx"and second best:",x1pe22.15)') RombergT(err_minloc(1,1),err_minloc(2,1)),RombergT(err_minloc(1,2),err_minloc(2,2))
     write(*,'(" RomberG - Minimum absolute (Romberg) errors for the properties:",x1pe22.15x,"and:",x1pe22.15)') abs_errRomberg1,abs_errRomberg2
+    write(*,'(" RomberG - Percentage of Romberg error with respect to the property:",xF7.2x,"% and:",xF7.2x,"%")') &
+    & 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
     !write(*,'(" RomberG - Romberg errors:",xF20.10,"% &&",xF20.10,"%")') &
     !& 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
     write(*,*)
