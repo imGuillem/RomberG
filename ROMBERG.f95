@@ -9,7 +9,7 @@
 !   analytic electronic energies, dipole moments and polarizabilities.
 !   It is also generalized in order to consider non-power of two steps
 ! 
-!       - Coded by Guillem Pey, 2025   
+!       - Coded by Guillem Pey, 2025-2026 
 !
 !####################################################################
 Module GrebmoR
@@ -17,6 +17,18 @@ implicit none
 integer :: inlop,onlop,positiveFields,negativeFields,totalFields,mF,pF,nF,tF,derivative_order
 
 Contains
+    Subroutine printWarning()
+    implicit none
+
+    write(*,'(" RomberG - Warning! Warning! Warning! Warning! Warning! Warning! Warning! Warning!")')
+    write(*,'(" RomberG - RomberG assumes the same convention of signs as Gaussian:")')
+    write(*,'(" RomberG - Route section NEGATIVE sign (-) are POSITIVE (+) in the input file name")')
+    write(*,'(" RomberG - Route section POSITIVE sign (+) are NEGATIVE (-) in the input file name")')
+    write(*,'(" RomberG - Assuming otherwise implies changing the sign of odd derivatives")')
+    write(*,'(" RomberG - Warning! Warning! Warning! Warning! Warning! Warning! Warning! Warning!")')
+
+    End subroutine
+
     Subroutine PrintP(TensorP,numberComponents,totalFields,level)
     implicit none
     double precision, allocatable, intent(inout), dimension(:,:,:) :: TensorP
@@ -198,17 +210,19 @@ Contains
 
     End subroutine DeclareProperties
 
-    Subroutine ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,mF,totalFields,F,P,secRombergP,mainRombergP)
+    Subroutine ComputeDerivatives(gaussianFormat,orcaFormat,axis,component,inlop,onlop,field_direction,o_derivative,mF,totalFields,F,P,secRombergP,mainRombergP)
     implicit none
     character*1,dimension(3) :: dipoleComponents
     character*2,dimension(6) :: alphaComponents
     character*3,dimension(10) :: betaComponents
     character*1, intent(in) :: field_direction
+    logical, intent(in) :: gaussianFormat,orcaFormat
     integer, intent(in) :: axis,component,totalFields,inlop,onlop,mF,o_derivative 
     double precision, intent(in), dimension(totalFields) :: F,P
     double precision, intent(out), dimension(3) :: mainRombergP,secRombergP
     double precision :: a,main_errRomberg,sec_errRomberg
     double precision :: energyDerivative = 1.0d0
+    double precision :: formatCorrector
     double precision, allocatable, dimension(:,:) :: RombergP    
     double precision, allocatable, dimension(:,:) :: errorP    
     double precision, allocatable, dimension(:) :: FF
@@ -231,9 +245,21 @@ Contains
     alphaComponents=(/"XX","XY","YY","XZ","YZ","ZZ"/)
     betaComponents=(/"XXX","XXY","XYY","YYY","XXZ","XYZ","YZZ","XZZ","YZZ","ZZZ"/)
 
+        !-- Compute step
     a=F(totalFields)/F(totalFields-1)
 
+        !-- Correct the format for Gaussian sign
+    !if (gaussianFormat.eqv..TRUE.) then
+    !    formatCorrector=-1.0d0
+    !else if (orcaFormat.eqv..TRUE.) then
+    !    formatCorrector=1.0d0
+    !end if
+    !write(*,*) gaussianFormat,orcaFormat
+    !write(*,*) formatCorrector
+    !write(*,*) energyDerivative*formatCorrector
+
         !-- General formulas for up to the fourth derivative
+    write(*,*)
     if (o_derivative.eq.1) then !compute finite-field's first derivative
         do i=1,mF-1
             FF(i)=energyDerivative*(P(mF+i)-P(mF-i))/(2.0d0*F(mF+i))
@@ -368,11 +394,11 @@ Contains
     err_minloc(1:2,2)=minloc(errRomberg)                        !-- Get its location
         err_minloc(2,2)=err_minloc(2,2)+1                       !-- Move it to the right
     deallocate(errRomberg)
-
+    
     write(*,*)
     write(*,'(" RomberG - Best value:",x1pe22.15,xx"and second best:",x1pe22.15)') RombergT(err_minloc(1,1),err_minloc(2,1)),RombergT(err_minloc(1,2),err_minloc(2,2))
     write(*,'(" RomberG - Minimum absolute (Romberg) errors for the properties:",x1pe22.15x,"and:",x1pe22.15)') abs_errRomberg1,abs_errRomberg2
-    write(*,'(" RomberG - Percentage of Romberg error with respect to the property:",xF7.2x,"% and:",xF7.2x,"%")') &
+    write(*,'(" RomberG - Percentage of Romberg error with respect to the property:",x1pe22.15x,"% and:",x1pe22.15x,"%")') &
     & 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
     !write(*,'(" RomberG - Romberg errors:",xF20.10,"% &&",xF20.10,"%")') &
     !& 1.0d2*abs_errRomberg1/RombergT(err_minloc(1,1),err_minloc(2,1)),1.0d2*abs_errRomberg2/RombergT(err_minloc(1,2),err_minloc(2,2))
@@ -380,8 +406,9 @@ Contains
 
     End subroutine RombergProcedure
 
-    Subroutine Reps(isEnergy,molname,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
+    Subroutine Reps(gaussianFormat,orcaFormat,isEnergy,molname,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
     implicit none
+    logical, intent(in) :: gaussianFormat,orcaFormat
     character*100, intent(in) :: molname
     character*1,dimension(6) :: derivative_substr
     character :: dipoleComponents(3)*1, alphaComponents(6)*2,betaComponents(10)*3
@@ -406,7 +433,7 @@ Contains
         do i=2,components
 
                 !-- Compute the finite-field approach for the given property and perform the Romberg procedure to reduce the error
-            call ComputeDerivatives(k,i,inlop,onlop,derivative_substr(k+3),derivative_order,mF,totalFields,TensorP(1:totalFields,1,k),TensorP(1:totalFields,i,k),secP,mainP)
+            call ComputeDerivatives(gaussianFormat,orcaFormat,k,i,inlop,onlop,derivative_substr(k+3),derivative_order,mF,totalFields,TensorP(1:totalFields,1,k),TensorP(1:totalFields,i,k),secP,mainP)
            !call ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,stepSQRT,mF,totalFields,F,P,secRombergTensor,mainRombergTensor)
 
                 !-- Get the full output values of the Romberg iterations
@@ -532,12 +559,15 @@ logical :: printProperties = .FALSE.
 logical :: isSlash = .FALSE.
 logical :: pauRomberg = .FALSE.
 logical :: initField = .FALSE.
+logical :: forceCalc = .FALSE.
+logical :: gaussianFields = .FALSE.
+logical :: orcaFields = .FALSE.
 logical :: isEnergy,isDipole,isAlpha,isBeta,isGamma
     !-- Tensors in which the properties are gathered
 double precision, allocatable, dimension (:,:,:) :: P_energy,P_dipole,P_alpha,P_beta
     !-- Output tensors for each property
 double precision, dimension(3) :: mainP,secP
-double precision, allocatable, dimension (:,:) :: simpleRomberg,neg_helpAllocat,pos_helpAllocat
+double precision, allocatable, dimension (:,:) :: simpleRomberg,hReadNF,hReadPF
 double precision, allocatable, dimension (:,:,:) :: mainRombergEnergy,secRombergEnergy
 double precision, allocatable, dimension (:,:,:) :: mainRombergDipole,secRombergDipole
 double precision, allocatable, dimension (:,:,:) :: mainRombergAlpha,secRombergAlpha
@@ -563,19 +593,21 @@ integer :: Xindex,Yindex,Zindex,indexBase,indexField
 integer :: stat1,ios,err,dummy,prefixPosition,errorType
 integer :: i,j,k
 
-type(option_s) :: opts(11)
+type(option_s) :: opts(13)
 !-- opts(i)=option_s(long_name,arguments?,short_name)
 opts(1) = option_s("input",.TRUE.,"i")
 opts(2) = option_s("output",.TRUE.,"o")
-opts(3) = option_s("longitudinal",.FALSE.,"L")
-opts(4) = option_s("isotropic",.FALSE.,"I")
-opts(5) = option_s("totalfields",.TRUE.,"F")
-opts(6) = option_s("printP",.FALSE.,"p")
-opts(7) = option_s("help",.FALSE.,"h")
-opts(8) = option_s("total",.FALSE.,"T")
-opts(9) = option_s("simple",.FALSE.,"S")
-opts(10) = option_s("sqrt",.FALSE.,"Y")
-opts(11) = option_s("init",.TRUE.,"Q")
+opts(3) = option_s("isotropic",.FALSE.,"I")
+opts(4) = option_s("totalfields",.TRUE.,"F")
+opts(5) = option_s("printP",.FALSE.,"p")
+opts(6) = option_s("help",.FALSE.,"h")
+opts(7) = option_s("total",.FALSE.,"T")
+opts(8) = option_s("simple",.FALSE.,"S")
+opts(9) = option_s("sqrt",.FALSE.,"Y")
+opts(10) = option_s("init",.TRUE.,"Q")
+opts(11) = option_s("force",.FALSE.,"J")
+opts(12) = option_s("G16",.FALSE.,"G")
+opts(13) = option_s("ORCA",.FALSE.,"K")
 
 derivative_substr=(/"x","y","z","X","Y","Z"/)
 dipoleComponents=(/"X  ","Y  ","Z  "/)
@@ -594,8 +626,7 @@ end if
 
     !-- Get command line arguments
 do
-    arg=getopt("i:o:F:Q:SLITYph",opts)
-        !-- Implementar "Simple"
+    arg=getopt("i:o:F:Q:SITYJKGph",opts)
     select case(arg)
         case(char(0))
             exit
@@ -653,6 +684,10 @@ do
             positiveFields=(totalFields-1)/2
             negativeFields=positiveFields
             mF=positiveFields+1
+            if (mod(totalFields,2).eq.0) then
+                write(*,'(" RomberG - Cannot input an even number of total fields. Stop.")')
+                stop
+            end if
 
         case("Q","init")
             initField=.TRUE.
@@ -660,9 +695,6 @@ do
 
         case("S","simple")
             simpleOutput=.TRUE.
-
-        case("L","longitudinal")
-            doLongitudinal=.TRUE.
 
         case("I","isotropic")
             doIsotropic=.TRUE.
@@ -674,21 +706,30 @@ do
         case("Y","sqrt")
             doSQRTstep=.TRUE. 
 
+        case("J","force")
+            forceCalc=.TRUE.
+
+        case("K","ORCA")
+            orcaFields=.TRUE.
+
+        case("G","G16")
+            gaussianFields=.TRUE.
+
         case("p","printP")
             printProperties=.TRUE.
 
         case("h","help")
             write(*,*)
             write(*,*) " Several optionalities are available for RomberG.exe:"
-            write(*,*) "    -i, --input          :   Input property - Energy/energy/E ; Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B"
-            write(*,*) "    -o, --output         :   Output property - Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B ; Gamma/gamma/G"
-            write(*,*) "    -F, --totalfields    :   Number of total fields probed. Integer required."
-            write(*,*) "    -L, --longitudinal   :   Whether to compute longitudinal properties or not."
-            write(*,*) "    -I, --isotropic      :   Whether to compute isotropic properties or not."
-            write(*,*) "    -T, --total          :   Combines the output of the -L and -I flags"
-            write(*,*) "    -S, --simple         :   Simplfiies the output to print properties under 1E-6 with Romberg errors lower than 10%"
-            write(*,*) "                             than its value, i.e. errors than 1E-7"
+            write(*,*) "    -i, --input          :   Input property - Energy/energy/E ; Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B. Character-string expected"
+            write(*,*) "    -o, --output         :   Output property - Dipole/dipole/M ; Alpha/alpha/A ; Beta/beta/B ; Gamma/gamma/G- Character-string expected"
+            write(*,*) "    -F, --totalfields    :   Number of total fields probed. Integer expected."
+            write(*,*) "    -I, --isotropic      :   Toggle the calculation of isotropic properties."
+            write(*,*) "    -S, --simple         :   Set to zero the calculated properties under 1E-6 with Romberg errors lower than 10%."
             write(*,*) "    -p, --printP         :   Print the derivatives when computing the Romberg triangle for each component."
+            write(*,*) "    -Q, --init           :   Different first field. Default 1.0d-4. Real number expected."
+            write(*,*) "    -Y, --sqrt           :   Activate the step of sqrt(2) to compute the derivatives."
+            write(*,*) "    -J, --force          :   Force the complete calculation of isotropic properties despite non-computed values. The latter are approximated to zero."
             write(*,*) "    -h, --help           :   Displays this message."
             write(*,*)
             write(*,*) " REMEMBER: The execution of RomberG.exe requires the name of the molecule, even for displaying this message."
@@ -704,6 +745,27 @@ if (derivative_order.le.0) then
     stop
 end if
 
+    !-- Pass the command-line input tests
+if (gaussianFields.eqv.orcaFields) then
+    write(*,'(" RomberG - Gaussian fields and ORCA fields are not compatible.")')
+    write(*,'(" RomberG - Consider adding the -G (for Gaussian) or -K (for ORCA) flag to sort the energies with the field.")')
+    write(*,'(" RomberG - RomberG stopped.")')
+    if (forceCalc.eqv..TRUE.) then
+        write(*,'(" RomberG - Force calculation flag activated. It is bypassed the flagging for the fields.")')
+        write(*,'(" RomberG - Defaulting to ORCA fields:")')
+        orcaFields = .TRUE.
+        write(*,'(" RomberG - ORCAconvention:   Route section POSITIVE sign (+) are POSITIVE (+) in the input file name")')
+        write(*,'(" RomberG - ORCAconvention:   Route section NEGATIVE sign (-) are NEGATIVE (-) in the input file name")')
+        write(*,*)
+        write(*,'(" RomberG - Do notice that computing odd derivatives in the other convention of sign will translate to")')
+        write(*,'("           having to change the sign of the result:")')
+        write(*,'(" RomberG - G16convention:    Route section NEGATIVE sign (-) are POSITIVE (+) in the input file name")')
+        write(*,'(" RomberG - G16convention:    Route section POSITIVE sign (+) are NEGATIVE (-) in the input file name")')
+    else
+        stop
+    end if
+end if
+
     !-- Get the name of the molecule from the command execution line
 call get_command_argument(command_argument_count(),value=mol_name,status=stat1)
 if (index(mol_name,".").ne.0) pauRomberg=.TRUE.
@@ -711,6 +773,7 @@ if (index(mol_name,"/").ne.0) isSlash=.TRUE.
 if (isSlash.eqv..TRUE.) mol_name=trim(mol_name(1:index(mol_name,"/")-1))
 
     !-- Call "Pau's version" of Romberg to only compute a single property - Call Finite-Field and Romberg
+        !-- Calling single-column file RomberG
 if (pauRomberg.eqv..TRUE.) then
     
         !-- Declare a different initial field than 1.0d-4 or 2.0d-4
@@ -719,10 +782,10 @@ if (pauRomberg.eqv..TRUE.) then
         !-- Open unit specific for this version
     open(unit=0918,file=mol_name,status="old")
     allocate(simpleRomberg(totalFields,2))
-    allocate(neg_helpAllocat(negativeFields,2))
-    allocate(pos_helpAllocat(negativeFields,2))
+    allocate(hReadNF(negativeFields,2))
+    allocate(hReadPF(positiveFields,2))
         
-        !-- Get the individual property of interest + error handling
+        !-- Get the individual property of interest + error handling + set to zero simpleRomberg(1,1)
     i=0
     do
         read(0918,*,end=0959) testVal
@@ -730,40 +793,65 @@ if (pauRomberg.eqv..TRUE.) then
         simpleRomberg(i,2) = testVal
     end do
     0959 continue
-    if (i.ne.totalFields) then
+    simpleRomberg(1,1)=0.0d0
+
+    if (mod(i,2).eq.0) then
+        write(*,'(" RomberG - Even number of fields. Cannot do finite-field procedure. Stop.")')
+        stop
+    else if (i.ne.totalFields) then
+        write(*,'(" RomberG - Number of input fields:",xI2)') i
+        write(*,'(" RomberG - Number of CLI fields:",xxxI2)') totalFields
         write(*,'(" RomberG - Number of input fields not matching the amount of input data. Stop.")') 
         stop
     end if
-    step=2.0d0
-    if (doSQRTstep.eqv..TRUE.) step=sqrt(2.0d0)
-    simpleRomberg(1,1)=0.0d0
 
-        !-- Allocate the field values for Romberg - It is considered the first field as 1.0d-4
+        !-- Get the step to compute the finite-field differences
+    if (doSQRTstep.eqv..TRUE.) then
+        step=sqrt(2.0d0)
+    else
+        step=2.0d0
+    end if
+
+    write(*,'(" RomberG - WARNING! It is assumed the sign convention of ORCA!")')
+
+        !-- Positive outs are positive fields, negative outs are negative outs
     do i=1,positiveFields
-        simpleRomberg(i+1,1)=initialField*step**(i-1)*1.0d-4
+        simpleRomberg(i+1,1)=1.0d0*initialField*step**(i-1)*1.0d-4
+        simpleRomberg(i+1+negativeFields,1)=-1.0d0*initialField*step**(i-1)*1.0d-4
     end do
+    
+        !-- Getting the hReadPF values
+    do i=1,positiveFields
+        hReadPF(i,1)=simpleRomberg(i+1,1) !-- FieldsPF
+        hReadPF(i,2)=simpleRomberg(i+1,2) !-- ValuesPF
+    end do
+        !-- Gettig the hReadNF values
     do i=1,negativeFields
-        simpleRomberg(i+1+negativeFields,1)=-1.0d0*step**(i-1)*1.0d-4
-        neg_helpAllocat(i,1)=-initialField*step**(i-1)*1.0d-4
-        pos_helpAllocat(i,1)=initialField*step**(i-1)*1.0d-4
-        neg_helpAllocat(i,2)=simpleRomberg(mF+i,2)
-        pos_helpAllocat(i,2)=simpleRomberg(i+1,2)
+        hReadNF(i,1)=simpleRomberg(i+1+negativeFields,1) !-- FieldsNF
+        hReadNF(i,2)=simpleRomberg(i+1+negativeFields,2) !-- ValuesNF
     end do
 
-        !-- Redefining the order of simpleRomberg to call Finite-Field: first negative fields, 0-field, positive fields
-    neg_helpAllocat=neg_helpAllocat(size(neg_helpAllocat,1):1:-1,:) !-- Reordering the negative fields from lowest to highest
+        !-- Middle element
     simpleRomberg(mF,:)=simpleRomberg(1,:)
-    do i=1,negativeFields
-        simpleRomberg(i,:)=neg_helpAllocat(i,:)
-    end do
-    do i=1,positiveFields
-        simpleRomberg(mF+i,:)=pos_helpAllocat(i,:)
-    end do
-    write(*,*)
+        !-- Positive fields
+    simpleRomberg(mF+1:mF+size(hReadPF,1),1:2)=hReadPF(:,1:2)
+        !-- Negative fields
+    simpleRomberg(1:size(hReadNF,1),1:2)=hReadNF(size(hReadNF,1):1:-1,1:2)
+
+    if (orcaFields.eqv..TRUE.) then
+        !simpleRomberg(:,2)=simpleRomberg(size(simpleRomberg,1):1:-1,2)
+        simpleRomberg(:,2)=simpleRomberg(:,2)
+    else if (gaussianFields.eqv..TRUE.) then
+        !simpleRomberg(:,2)=simpleRomberg(:,2)
+        simpleRomberg(:,2)=simpleRomberg(size(simpleRomberg,1):1:-1,2)
+    end if
+
+    deallocate(hReadPF)
+    deallocate(hReadNF)
 
         !-- Calling Finite-Field and Romberg Procedure
    !call ComputeDerivatives(axis,component,inlop,onlop,field_direction,o_derivative,mF,totalFields,F,P,secRombergP,mainRombergP)
-    call ComputeDerivatives(1,1,inlop,onlop,"Z",derivative_order,mF,totalFields,simpleRomberg(:,1),simpleRomberg(:,2),sec_simpleOutput,main_simpleOutput)    
+    call ComputeDerivatives(gaussianFields,orcaFields,1,1,inlop,onlop,"Z",derivative_order,mF,totalFields,simpleRomberg(:,1),simpleRomberg(:,2),sec_simpleOutput,main_simpleOutput)    
 
         !-- Redirect to the end of RomberG
     goto 0920
@@ -910,7 +998,7 @@ if (inlop.eq.3) then !-- Compute the derivatives of beta
     if (allocated(secRombergBeta)) deallocate(secRombergBeta)
     allocate(mainRombergBeta(10,3,3)); allocate(secRombergBeta(10,3,3))
    !call Reps(isEnergy,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,mol_name,printProperties,inlop,onlop,11,derivative_order,mF,totalFields,P_beta,secRombergBeta,mainRombergBeta)
+    call Reps(gaussianFields,orcaFields,isEnergy,mol_name,printProperties,inlop,onlop,11,derivative_order,mF,totalFields,P_beta,secRombergBeta,mainRombergBeta)
 
     if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergBeta)
 
@@ -952,7 +1040,7 @@ else if (inlop.eq.2) then !-- Compute the derivatives of alpha
     if (allocated(secRombergAlpha)) deallocate(secRombergAlpha)
     allocate(mainRombergAlpha(6,3,3)); allocate(secRombergAlpha(6,3,3))
    !call Reps(isEnergy,mol_name,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,mol_name,printProperties,inlop,onlop,7,derivative_order,mF,totalFields,P_alpha,secRombergAlpha,mainRombergAlpha)
+    call Reps(gaussianFields,orcaFields,isEnergy,mol_name,printProperties,inlop,onlop,7,derivative_order,mF,totalFields,P_alpha,secRombergAlpha,mainRombergAlpha)
 
     if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergAlpha)
 
@@ -996,7 +1084,7 @@ else if (inlop.eq.1) then !-- Compute the derivatives of the dipole moment
     if (allocated(secRombergDipole)) deallocate(secRombergDipole)
     allocate (mainRombergDipole(3,3,3)); allocate(secRombergDipole(3,3,3))
    !call Reps(isEnergy,mol_name,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,mol_name,printProperties,inlop,onlop,4,derivative_order,mF,totalFields,P_dipole,secRombergDipole,mainRombergDipole)
+    call Reps(gaussianFields,orcaFields,isEnergy,mol_name,printProperties,inlop,onlop,4,derivative_order,mF,totalFields,P_dipole,secRombergDipole,mainRombergDipole)
 
     if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergDipole)
 
@@ -1050,7 +1138,7 @@ else if (inlop.eq.0) then !-- Compute the derivatives of the energy
     if (allocated(secRombergEnergy)) deallocate(secRombergEnergy)
     allocate (mainRombergEnergy(3,3,3)); allocate(secRombergEnergy(3,3,3))
    !call Reps(isEnergy,mol_name,printProperties,inlop,onlop,components,derivative_order,mF,totalFields,TensorP,secRombergP,mainRombergP)
-    call Reps(isEnergy,mol_name,printProperties,inlop,onlop,2,derivative_order,mF,totalFields,P_energy,secRombergEnergy,mainRombergEnergy)
+    call Reps(gaussianFields,orcaFields,isEnergy,mol_name,printProperties,inlop,onlop,2,derivative_order,mF,totalFields,P_energy,secRombergEnergy,mainRombergEnergy)
 
     if (simpleOutput.eqv..TRUE.) call complex2simple(mainRombergEnergy)
 
@@ -1208,10 +1296,10 @@ if (doIsotropic.eqv..TRUE.) then
     if (onlop.eq.2) then
             !-- Compute the isotropic polarizability
 
-            !-- Compute deltaAlpha: 10.1007/s42452-025-07291-9
+            !-- Compute general deltaAlpha: 10.1007/s42452-025-07291-9
         if (inlop.eq.0) write(*,'(" RomberG - WARNING! Δα requires crossed terms. Do not trust the printed value.")')
-        deltaAlpha=dsqrt((Alpha(1,1)-Alpha(2,2))**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+12.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
-        !deltaAlpha=dsqrt(Alpha(1,1)-Alpha(2,2)**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0+24.0d0*(Alpha(1,2)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,1)**2.0d0))
+        deltaAlpha=dsqrt((Alpha(1,1)-Alpha(2,2))**2.0d0+(Alpha(2,2)-Alpha(3,3))**2.0d0+(Alpha(3,3)-Alpha(1,1))**2.0d0 & 
+        & + 3.0d0*(Alpha(1,2)**2.0d0+Alpha(2,1)**2.0d0+Alpha(2,3)**2.0d0+Alpha(3,2)**2.0d0+Alpha(3,1)**2.0d0+Alpha(1,3)**2.0d0))**0.5d0
         deltaAlpha=deltaAlpha*(dsqrt(2.0d0)/2.0d0)
         write(*,'(" RomberG - Δα = ",1pe22.15)') deltaAlpha
 
@@ -1230,11 +1318,10 @@ if (doIsotropic.eqv..TRUE.) then
         beta_vec=0.0d0
         do i=1,3
             do j=1,3
-                beta_vec=beta_vec+Beta(i,j,j)
+                beta_vec=beta_vec+(beta(i,j,j)+beta(j,i,j)+beta(j,j,i))**2.0d0
             end do
-            beta_vec=beta_vec**2.0d0
         end do
-        beta_vec=dsqrt(beta_vec)
+        beta_vec=(1.0d0/3.0d0)*dsqrt(beta_vec)
         write(*,'(" RomberG - Vectorial hyperpolarizability = ",1pe22.15)') beta_vec
 
             !-- Parallel hyperpolarizability: J. Chem. Phys. 130, 194108 2009
@@ -1253,10 +1340,10 @@ if (doIsotropic.eqv..TRUE.) then
         beta_perpendicular=0.0d0
         do i=1,3
             do j=1,3
-                beta_perpendicular=beta_perpendicular+(2.0d0*Beta(i,j,j)-3.0d0*Beta(j,i,j)+2.0d0*Beta(j,j,i))*tmpDipole(i)
+                beta_perpendicular=beta_perpendicular+tmpDipole(i)*(2.0d0*Beta(i,j,j)-3.0d0*Beta(j,i,j)+2.0d0*Beta(j,j,i))
             end do
         end do
-        beta_perpendicular=beta_perpendicular/5.0d0
+        beta_perpendicular=beta_perpendicular/5.0d0/tmpDipModulus
         write(*,'(" RomberG - Perpendicular hyperpolarizability = ",1pe22.15)') beta_perpendicular
 
             !-- "Beta4" from 10.1021/acs.jpca.5c00383; equivalent to parallel hyperpolarizability but without a 1.0d0/5.0d0 factor
@@ -1276,15 +1363,18 @@ if (doIsotropic.eqv..TRUE.) then
     else if (onlop.eq.4) then
 
             !-- Compute the parallel second hyperpolarizability
-        if (inlop.eq.0.or.inlop.eq.1) write(*,'(" RomberG - WARNING! The parallel second hyperpolarizability is lacking terms to compute. Do not fully trust the printed value")')
-        gamma_parallel=0.0d0
-        do i=1,3
-            do j=1,3
-                gamma_parallel=gamma_parallel+Gamma(i,i,j,j)
-            end do
-        end do    
-        gamma_parallel=gamma_parallel/5.0d0
-        write(*,'(" RomberG - Parallel/Isotropic second hyperpolarizability  = ",1pe22.15)') gamma_parallel
+        if (inlop.eq.0.or.inlop.eq.1) write(*,'(" RomberG - WARNING! The parallel second hyperpolarizability is lacking terms to compute. Do not fully trust the printed value!")')
+        if (inlop.eq.0.or.inlop.eq.1) write(*,'(" RomberG - To bypass the warning use the flag --force or -J ")')
+        if (forceCalc.eqv..TRUE..or.inlop.ge.2) then
+            gamma_parallel=0.0d0
+            do i=1,3
+                do j=1,3
+                    gamma_parallel=gamma_parallel+(Gamma(i,i,j,j)+Gamma(i,j,i,j)+Gamma(i,i,j,j))
+                end do
+            end do    
+            gamma_parallel=gamma_parallel/15.0d0
+            write(*,'(" RomberG - Parallel/Isotropic second hyperpolarizability  = ",1pe22.15)') gamma_parallel
+        end if
 
         if (inlop.le.2) then
             write(*,'(" RomberG - Analytic dipole moment modulus |μ|         = ",1pe22.15)') exDipoleMoment
@@ -1298,6 +1388,13 @@ close(unit=4)
 close(unit=44)
 close(unit=1101)
 0920 continue
+if (orcaFields.eqv..TRUE.) then
+    write(*,'(" RomberG - WARNING! ORCA-format called!")')
+    write(*,'(" RomberG - If your input are energies coming from GAUSSIAN, you must change the sign of the odd derivative")')
+else if (gaussianFields.eqv..TRUE.) then
+    write(*,'(" RomberG - WARNING! GAUSSIAN-format called!")')
+    write(*,'(" RomberG - If your input are energies coming from ORCA, you must change the sign of the odd derivative")')
+end if
 close(unit=0918)
 write(*,*)
 write(*,*) "RomberG - Romberg procedure done!"
